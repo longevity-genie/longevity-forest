@@ -9,8 +9,8 @@ LongevityForest is a multi-agent bioinformatics system for analysing protein str
 The LongevityForest science agents ecosystem is a set of tools for studying genes and proteins that influence lifespan. It currently includes:
 
 - **[longevity_forest](https://github.com/longevity-genie/longevity_forest)** (this repository): multi-agent gene analysis system with specialised bioinformatics agents
-- **[protein_hunter_mcp](https://github.com/longevity-genie/protein_hunter_mcp)**: MCP server for protein structure analysis and protein target selection
-- **[cell2sequence4longevity-mcp](https://github.com/longevity-genie/cell2sequence4longevity-mcp)**: MCP server connecting cellular phenotypes to sequence-level changes in longevity research
+- **[protein_hunter_mcp](https://github.com/longevity-genie/protein_hunter_mcp)**: MCP server for protein structure analysis, protein target selection, and targeted protein degradation design
+- **[cell2sentence4longevity-mcp](https://github.com/longevity-genie/cell2sentence4longevity-mcp)**: MCP server for in-silico knockout experiments using the cell2sentence4longevity model to predict age from gene expression patterns
 
 Used together, these tools link cellular observations, sequence analysis, and protein structure analysis across multiple biological scales.
 
@@ -119,19 +119,60 @@ This workflow:
 
 ⚠️ **WARNING: GPU-intensive workflow** - This command will use the cell2sequence4longevity MCP server which requires significant GPU resources (H100 GPU). This workflow performs computationally expensive cellular simulations. Please run mindfully as we do not have advanced GPU VRAM management.
 
-**Note:** This feature is currently under development and will be available soon.
+**Prerequisites:** Ensure the cell2sentence4longevity MCP server is running:
 
 ```bash
-# Perform in-silico knockout analysis (coming soon)
-# uv run forest insilico-knockout GENE_NAME
-# or: uv run longevity_forest insilico-knockout GENE_NAME
+# In the cell2sentence4longevity-mcp directory
+uv run cell2sentence4longevity-mcp-run --host 0.0.0.0 --port 3002
+```
+
+**Usage:**
+
+```bash
+# Perform in-silico knockout analysis (default: KLF6)
+uv run forest insilico-knockout
+# or: uv run longevity_forest insilico-knockout
+
+# Analyze a specific gene
+uv run forest insilico-knockout TP53
+
+# Provide a custom gene expression sentence and metadata
+uv run forest insilico-knockout KLF6 \
+  --gene-sentence "MT-CO1 FTL EEF1A1 HLA-B LST1 KLF6 S100A4 HLA-C" \
+  --sex female \
+  --tissue blood \
+  --cell-type "CD14-low, CD16-positive monocyte" \
+  --smoking-status 0
+
+# Available options:
+# --gene-sentence, -g: Gene expression sentence (space-separated, descending order)
+# --sex, -s: Sex metadata (male/female)
+# --tissue, -t: Tissue type (e.g., blood, brain, liver)
+# --cell-type, -ct: Cell type (e.g., "CD14-low, CD16-positive monocyte")
+# --smoking-status, -sm: Smoking status (0 = non-smoker, 1 = smoker)
+# --config, -c: Path to configuration YAML file
+# --debug, -d: Show debug information
+# --show-history/--no-history: Display conversation history (default: enabled)
 ```
 
 This workflow will:
-1. Simulate gene knockout effects at the cellular level
-2. Predict phenotypic changes using AI models
-3. Analyze sequence-to-phenotype relationships
-4. Generate comprehensive reports with predictions and confidence metrics
+1. Construct or use provided gene expression sentence from aging-related genes
+2. Simulate gene knockout by removing the specified gene
+3. Predict biological age before and after knockout using the Cell2Sentence4Longevity model
+4. Calculate delta age and interpret the gene's impact on aging:
+   - **Positive delta**: Gene knockout increases age (gene may be protective/anti-aging)
+   - **Negative delta**: Gene knockout decreases age (gene may be pro-aging)
+   - **Near-zero delta**: Gene has minimal impact on age prediction
+5. Generate comprehensive reports with biological context and interpretation
+
+**Example Output:**
+
+Results are saved to `data/output/insilico_knockout_GENENAME_TIMESTAMP.md` and include:
+- Table comparing original vs knockout predictions
+- Delta age calculation and interpretation
+- Gene expression sentences (original and knockout)
+- Biological context and known functions
+- All metadata used in the analysis
 
 ### Output
 
@@ -160,20 +201,36 @@ Example output structure:
 - Automatic continuation when a report is incomplete
 - Intermediate results cached in `data/interim/` for later inspection
 
-## ⚠️ GPU-Intensive Workflows
+## ⚠️ Important Disclaimers
 
-**IMPORTANT:** This system includes two resource-heavy agentic workflows that run on the same H100 GPU instance:
+### Resource Requirements
 
-1. **`hunt-protein`** - Protein degradation design using protein_hunter_mcp
-2. **`insilico-knockout`** (coming soon) - Cellular knockout simulations using cell2sequence4longevity-mcp
+This system provides **three distinct agentic workflows** with different resource requirements:
 
-Both workflows:
-- Require significant GPU VRAM (H100 GPU)
-- Take 5-10 minutes per design/simulation
-- Share the same GPU instance
-- Do not have advanced GPU VRAM management
+1. **`analyze-gene` / `analyze-genes`** (CPU only, runs locally)
+   - Uses only LLM APIs (Anthropic Claude, Google Gemini)
+   - No GPU required
+   - Safe to run anytime, though may take time depending on gene complexity
+   - Can be run freely without resource concerns
 
-**Please run these workflows mindfully** - avoid running multiple GPU-intensive tasks simultaneously to prevent out-of-memory errors. Standard gene analysis workflows (`analyze-gene`, `analyze-genes`) do not require GPU and can be run freely.
+2. **`hunt-protein`** (GPU-intensive)
+   - Uses protein_hunter_mcp server
+   - Requires significant GPU VRAM, right now deployed at H100 instance together with cell2sentence4longevity model
+   - Takes 5-10 minutes per design
+   - **Must be run carefully to avoid overloading the H100 instance**
+
+3. **`insilico-knockout`** GPU-intensive
+   - Uses cell2sequence4longevity-mcp server deployed at remote H100 instance
+   - Requires significant GPU VRAM, right now shares H100 instance with protein hunter mcp
+   - Takes 5-10 minutes per simulation
+   - **Must be run carefully to avoid overloading the H100 instance**
+
+**CRITICAL:** The GPU-intensive workflows (`hunt-protein` and `insilico-knockout`) share the same H100 GPU instance and do not have advanced GPU VRAM management. **Please run these workflows mindfully** - avoid running multiple GPU-intensive tasks simultaneously to prevent out-of-memory errors.
+
+### Workflow Limitations
+
+- **`analyze-gene` and `hunt-protein`**: Most complete workflows that can handle **any gene/protein** as input
+- **`insilico-knockout`**: Currently limited to a **predefined set of genes** due to time constraints during development. Full gene coverage will be added in future releases.
 
 ## Configuration
 

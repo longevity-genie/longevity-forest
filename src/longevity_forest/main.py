@@ -16,7 +16,7 @@ from just_agents.web.web_agent import WebAgent
 
 from longevity_forest.core.helpers import save_result_to_markdown, validate_markdown_file, serialize_memory_to_yaml
 from longevity_forest.config.llm import ANTHROPIC_CLAUDE_4_5_HAIKU
-from longevity_forest.config.prompts import get_gene_analysis_prompt
+from longevity_forest.config.prompts import get_gene_analysis_prompt, get_insilico_knockout_prompt
 
 # Fix encoding for Windows
 if sys.platform == 'win32':
@@ -566,6 +566,180 @@ Generate a comprehensive report in markdown format."""
             if hasattr(protein_hunter_agent, 'memory'):
                 print(f"\n{protein_hunter_agent.description if hasattr(protein_hunter_agent, 'description') else 'Protein Hunter Agent'}:")
                 protein_hunter_agent.memory.pretty_print_all_messages()
+            # Repeat report link after history for convenience
+            print(f"\nOpen report: {file_uri}")
+
+
+@app.command()
+def insilico_knockout(
+    gene_name: str = Argument("KLF6", help="Gene symbol to knock out for in-silico analysis (e.g., KLF6, TP53, FOXO3)"),
+    gene_sentence: Optional[str] = Option(
+        None,
+        "--gene-sentence",
+        "-g",
+        help="Optional gene expression sentence (space-separated gene names ordered by descending expression). If not provided, agent will construct one from OpenGenes."
+    ),
+    sex: Optional[str] = Option(
+        None,
+        "--sex",
+        "-s",
+        help="Optional sex metadata for improved prediction (male/female)"
+    ),
+    tissue: Optional[str] = Option(
+        None,
+        "--tissue",
+        "-t",
+        help="Optional tissue type (e.g., blood, brain, liver)"
+    ),
+    cell_type: Optional[str] = Option(
+        None,
+        "--cell-type",
+        "-ct",
+        help="Optional cell type (e.g., 'CD14-low, CD16-positive monocyte')"
+    ),
+    smoking_status: Optional[int] = Option(
+        None,
+        "--smoking-status",
+        "-sm",
+        help="Optional smoking status: 0 = non-smoker, 1 = smoker"
+    ),
+    config: Optional[Path] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to in-silico knockout configuration YAML file (defaults to config/agents/insilico_knockout.yaml)"
+    ),
+    debug: bool = Option(
+        False,
+        "--debug",
+        "-d",
+        help="Show debug information"
+    ),
+    show_history: bool = Option(
+        True,
+        "--show-history/--no-history",
+        help="Display conversation history after analysis"
+    ),
+) -> None:
+    """
+    Perform in-silico knockout analysis using cell2sentence4longevity model.
+    
+    This command will:
+    1. Construct or use provided gene expression sentence
+    2. Simulate gene knockout by removing the specified gene
+    3. Compare biological age predictions before and after knockout
+    4. Analyze the impact of the gene on aging
+    
+    ⚠️ WARNING: GPU-intensive workflow - requires H100 GPU and cell2sentence4longevity MCP server running.
+    """
+    setup_warnings()
+    load_dotenv()
+    
+    # Setup Eliot logging
+    json_path, log_path = setup_logging()
+    print(f"Logging initialized: {log_path}")
+    
+    # GPU warning
+    console = Console()
+    console.print("\n[bold red]⚠️  WARNING: GPU-INTENSIVE WORKFLOW[/bold red]")
+    console.print("[yellow]This command requires the cell2sentence4longevity MCP server with H100 GPU.[/yellow]")
+    console.print("[yellow]Ensure the server is running at http://localhost:3002/mcp before proceeding.[/yellow]\n")
+    
+    with start_action(action_type="insilico_knockout_command", gene_name=gene_name) as action:
+        # Determine config file path
+        if config is None:
+            config = Path(__file__).parent / "config/agents/insilico_knockout.yaml"
+        
+        if not config.exists():
+            action.log(message_type="config_not_found", config_path=str(config))
+            typer.echo(f"Error: Configuration file not found: {config}", err=True)
+            raise typer.Exit(1)
+        
+        action.log(message_type="config_loaded", config_path=str(config))
+        
+        console.print(f"\n[bold cyan]In-silico Knockout Analysis for:[/bold cyan] [bold yellow]{gene_name}[/bold yellow]")
+        console.print("[dim]" + "-" * 60 + "[/dim]")
+        
+        # Load insilico knockout agent
+        print("Loading in-silico knockout agent...")
+        
+        # Import BaseAgentWithLogging from just_agents
+        from just_agents.base_agent import BaseAgentWithLogging
+        
+        knockout_agent: BaseAgentWithLogging = BaseAgentWithLogging.from_yaml(
+            section_name="insilico_knockout_agent",
+            parent_section="agent_profiles",
+            file_path=config
+        )
+        print("✓ Loaded insilico_knockout_agent")
+        action.log(message_type="agent_loaded", agent="insilico_knockout_agent")
+        
+        # Generate the prompt
+        prompt = get_insilico_knockout_prompt(
+            gene_name=gene_name,
+            gene_sentence=gene_sentence or "",
+            sex=sex or "",
+            tissue=tissue or "",
+            cell_type=cell_type or "",
+            smoking_status=smoking_status
+        )
+        
+        # Log metadata if provided
+        metadata = {}
+        if gene_sentence:
+            metadata["gene_sentence"] = gene_sentence
+        if sex:
+            metadata["sex"] = sex
+        if tissue:
+            metadata["tissue"] = tissue
+        if cell_type:
+            metadata["cell_type"] = cell_type
+        if smoking_status is not None:
+            metadata["smoking_status"] = smoking_status
+        
+        if metadata:
+            action.log(message_type="metadata_provided", **metadata)
+            console.print("\n[bold]Metadata provided:[/bold]")
+            for key, value in metadata.items():
+                console.print(f"  • {key}: {value}")
+        
+        console.print("\n[bold]Sending knockout analysis request...[/bold]")
+        console.print("[yellow]Note: Age prediction requires GPU inference (may take 1-2 minutes)[/yellow]\n")
+        
+        result = knockout_agent.query(query_input=prompt)
+        action.log(message_type="knockout_analysis_complete", gene_name=gene_name)
+        
+        # Save and validate results
+        if result:
+            result_str = str(result) if not isinstance(result, str) else result
+            # Use gene name for filename
+            safe_gene = gene_name.replace("/", "_").replace("\\", "_")
+            filepath = save_result_to_markdown(result_str, f"insilico_knockout_{safe_gene}")
+            action.log(message_type="result_saved", filepath=str(filepath))
+            
+            is_valid = validate_markdown_file(filepath)
+            file_uri = filepath.resolve().as_uri()
+            if is_valid:
+                action.log(message_type="validation_success", filepath=str(filepath))
+                typer.echo(f"\n✓ In-silico knockout analysis successfully saved and validated: {filepath}")
+                typer.echo(f"  Open report: {file_uri}")
+            else:
+                action.log(message_type="validation_warning", filepath=str(filepath))
+                typer.echo(f"\n⚠ In-silico knockout analysis saved but validation had issues: {filepath}")
+                typer.echo(f"  Open report: {file_uri}")
+        else:
+            action.log(message_type="no_result", gene_name=gene_name)
+            typer.echo("✗ No result returned from in-silico knockout agent", err=True)
+            raise typer.Exit(1)
+        
+        # Display conversation history
+        if show_history:
+            print("\n" + "="*60)
+            print("CONVERSATION HISTORY")
+            print("="*60)
+            if hasattr(knockout_agent, 'memory'):
+                print(f"\n{knockout_agent.description if hasattr(knockout_agent, 'description') else 'In-silico Knockout Agent'}:")
+                knockout_agent.memory.pretty_print_all_messages()
             # Repeat report link after history for convenience
             print(f"\nOpen report: {file_uri}")
 

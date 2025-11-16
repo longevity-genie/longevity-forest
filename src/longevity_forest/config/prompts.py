@@ -121,3 +121,89 @@ SEQUENCE2FUNCTION_REPORT_PROMPT = f"""Based on the data presented by user and th
 write a final longevity forest report to establish clear relationships between protein/gene sequences and their functional outcomes related to longevity. 
 Output the results in an MD format, in WikiCrow by FutureHouse format. See https://wikicrow.ai/APOE as a reference for the format
 """
+
+
+def get_insilico_knockout_prompt(
+    gene_name: str,
+    gene_sentence: str = "",
+    sex: str = "",
+    tissue: str = "",
+    cell_type: str = "",
+    smoking_status: int | None = None
+) -> str:
+    """Generate in-silico knockout analysis prompt for the specified gene.
+    
+    Args:
+        gene_name: The name of the gene to knock out
+        gene_sentence: Optional gene expression sentence (space-separated gene names by descending expression)
+        sex: Optional sex metadata (male/female)
+        tissue: Optional tissue type (e.g., blood, brain, liver)
+        cell_type: Optional cell type (e.g., CD14-low, CD16-positive monocyte)
+        smoking_status: Optional smoking status (0 = non-smoker, 1 = smoker)
+        
+    Returns:
+        The formatted prompt string
+    """
+    prompt_parts = [
+        f"Perform an in-silico knockout analysis for the gene: {gene_name}",
+        "",
+        "Your task:",
+        f"1. If a gene expression sentence is not provided, construct a typical aging-related gene expression sentence from OpenGenes database"
+    ]
+    
+    if gene_sentence:
+        prompt_parts.extend([
+            f"   Use the provided gene sentence: {gene_sentence}",
+            f"   Ensure {gene_name} is present in the sentence"
+        ])
+    else:
+        prompt_parts.extend([
+            f"   The sentence should include {gene_name} and other aging-related genes",
+            "   Order genes by typical descending expression level"
+        ])
+    
+    prompt_parts.extend([
+        f"2. Perform in-silico knockout by removing {gene_name} from the gene expression sentence",
+        "3. Compare age predictions before and after knockout using the cell2sentence4longevity tools",
+    ])
+    
+    # Add metadata section if any metadata is provided
+    metadata_provided = []
+    if sex:
+        metadata_provided.append(f"   - Sex: {sex}")
+    if tissue:
+        metadata_provided.append(f"   - Tissue: {tissue}")
+    if cell_type:
+        metadata_provided.append(f"   - Cell type: {cell_type}")
+    if smoking_status is not None:
+        metadata_provided.append(f"   - Smoking status: {smoking_status}")
+    
+    if metadata_provided:
+        prompt_parts.extend([
+            "4. Include the following metadata in your predictions for improved accuracy:"
+        ] + metadata_provided)
+        next_step = "5"
+    else:
+        next_step = "4"
+    
+    prompt_parts.extend([
+        f"{next_step}. Analyze and interpret the results:",
+        "   - Report the delta age (change in predicted biological age)",
+        "   - Interpret the direction of the effect:",
+        "     * Positive delta: Gene knockout increases age (gene may be protective/anti-aging)",
+        "     * Negative delta: Gene knockout decreases age (gene may be pro-aging)",
+        "     * Near-zero delta: Gene has minimal impact on age prediction",
+        f"   - Discuss the biological significance of the {gene_name} gene in aging",
+        "   - Consider the position of the gene in the expression ranking",
+        "",
+        "Provide a comprehensive report in markdown format with:",
+        "- Table showing original vs knockout predictions",
+        "- Delta age and interpretation",
+        "- Biological context and known functions of the gene",
+        "- Gene expression sentences used (original and knockout)",
+        "- All metadata included in the analysis",
+        "",
+        "IMPORTANT: Use the insilico_knockout tool directly as it handles both predictions and comparison automatically."
+    ])
+    
+    return "\n".join(prompt_parts)
