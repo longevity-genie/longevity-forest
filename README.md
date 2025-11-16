@@ -71,22 +71,67 @@ cp .env.template .env
 
 ### Running gene analysis
 
+**Note:** You can use either `longevity_forest` or the shorter alias `forest` for all commands.
+
 ```bash
 # Analyze a specific gene (default: NRF2)
-uv run longevity_forest analyze-gene
+uv run forest analyze-gene
+# or: uv run longevity_forest analyze-gene
 
 # Analyze a specific gene by name
-uv run longevity_forest analyze-gene TP53
+uv run forest analyze-gene TP53
 
 # Analyze multiple genes
-uv run longevity_forest analyze-genes NRF2 TP53 FOXO3
-
+uv run forest analyze-genes NRF2 TP53 FOXO3
+# note: can take long time and claude-credits heavy
 # Available options:
 # --config, -c: Path to configuration YAML file
 # --cache/--no-cache: Enable/disable cached interim results (default: enabled)
 # --debug, -d: Show debug information including tool distribution
 # --show-history/--no-history: Display conversation history (default: enabled for single gene)
 ```
+
+### Running protein degradation design (hunt-protein)
+
+⚠️ **WARNING: GPU-intensive workflow** - This command uses the protein hunter MCP server which requires significant GPU resources (H100 GPU). Protein design tasks take 5-10 minutes per design. Please run mindfully as we do not have advanced GPU VRAM management.
+
+```bash
+# Design a degradation peptide for a target gene/protein (default: KLF6)
+uv run forest hunt-protein
+# or: uv run longevity_forest hunt-protein
+
+# Design for a specific target
+uv run forest hunt-protein TP53
+
+# Available options:
+# --config, -c: Path to protein hunter configuration YAML file
+# --debug, -d: Show debug information
+# --show-history/--no-history: Display conversation history after design (default: enabled)
+```
+
+This workflow:
+1. Resolves gene names to protein sequences using UniProt
+2. Designs high-affinity protein binders using Boltz/Chai AI models
+3. Creates degradation adaptors by fusing ubiquitin to the binder
+4. Provides comprehensive reports with sequences, metrics, and structure files
+
+### Running in-silico knockout analysis (insilico-knockout)
+
+⚠️ **WARNING: GPU-intensive workflow** - This command will use the cell2sequence4longevity MCP server which requires significant GPU resources (H100 GPU). This workflow performs computationally expensive cellular simulations. Please run mindfully as we do not have advanced GPU VRAM management.
+
+**Note:** This feature is currently under development and will be available soon.
+
+```bash
+# Perform in-silico knockout analysis (coming soon)
+# uv run forest insilico-knockout GENE_NAME
+# or: uv run longevity_forest insilico-knockout GENE_NAME
+```
+
+This workflow will:
+1. Simulate gene knockout effects at the cellular level
+2. Predict phenotypic changes using AI models
+3. Analyze sequence-to-phenotype relationships
+4. Generate comprehensive reports with predictions and confidence metrics
 
 ### Output
 
@@ -115,6 +160,21 @@ Example output structure:
 - Automatic continuation when a report is incomplete
 - Intermediate results cached in `data/interim/` for later inspection
 
+## ⚠️ GPU-Intensive Workflows
+
+**IMPORTANT:** This system includes two resource-heavy agentic workflows that run on the same H100 GPU instance:
+
+1. **`hunt-protein`** - Protein degradation design using protein_hunter_mcp
+2. **`insilico-knockout`** (coming soon) - Cellular knockout simulations using cell2sequence4longevity-mcp
+
+Both workflows:
+- Require significant GPU VRAM (H100 GPU)
+- Take 5-10 minutes per design/simulation
+- Share the same GPU instance
+- Do not have advanced GPU VRAM management
+
+**Please run these workflows mindfully** - avoid running multiple GPU-intensive tasks simultaneously to prevent out-of-memory errors. Standard gene analysis workflows (`analyze-gene`, `analyze-genes`) do not require GPU and can be run freely.
+
 ## Configuration
 
 ### Main configuration files
@@ -130,7 +190,7 @@ Example output structure:
 To analyze a different gene, use the CLI command:
 
 ```bash
-uv run longevity_forest analyze-gene GENE_NAME
+uv run forest analyze-gene GENE_NAME
 ```
 
 To customize the analysis prompt, edit `src/longevity_forest/config/prompts.py`:
@@ -190,10 +250,10 @@ longevity_forest/
 
 ```bash
 # Run default NRF2 analysis
-uv run longevity_forest analyze-gene NRF2
+uv run forest analyze-gene NRF2
 
 # Or use the default (NRF2)
-uv run longevity_forest analyze-gene
+uv run forest analyze-gene
 ```
 
 The default NRF2 analysis performs:
@@ -256,7 +316,7 @@ logs/
 To enable debug output, use the `--debug` flag:
 
 ```bash
-uv run longevity_forest analyze-gene NRF2 --debug
+uv run forest analyze-gene NRF2 --debug
 ```
 
 This will show tool distribution across agents and other debugging information.
@@ -300,12 +360,14 @@ Validation checks include:
 
 ## Use cases
 
-- Gene function analysis: sequence-to-function relationships
-- Variant impact assessment for genetic variants
-- Longevity research: ageing-related genes and pathways
-- Drug target analysis for protein targets and interactions
-- Literature mining and research synthesis
-- Structural bioinformatics combining sequence and 3D structure data
+- **Gene function analysis**: sequence-to-function relationships
+- **Variant impact assessment**: for genetic variants
+- **Longevity research**: ageing-related genes and pathways
+- **Drug target analysis**: for protein targets and interactions
+- **Protein degradation design** (GPU): design targeted protein degraders using `hunt-protein`
+- **In-silico knockout** (GPU, coming soon): simulate gene knockout effects at cellular level
+- **Literature mining**: and research synthesis
+- **Structural bioinformatics**: combining sequence and 3D structure data
 
 ## Performance
 
@@ -351,7 +413,7 @@ For detailed information about the system architecture, see the agent configurat
 - Agent profiles: `src/longevity_forest/config/agents/web_search_delegated.yaml`
 - Agent prompts: `src/longevity_forest/config/prompts.py`
 - MCP configurations: `src/longevity_forest/config/mcp.py`
-- Tool mappings: `src/longevity_forest/config/GENE_ANALYSIS_TOOL_MAPPING.md`
+- Tool mappings: `docs/GENE_ANALYSIS_TOOL_MAPPING.md`
 
 ## Contributing
 
@@ -373,4 +435,4 @@ When publishing results based on this system:
 - verify important findings against the underlying literature
 - treat the agent outputs as assistance for expert analysis, not a substitute for it
 
-For agent behaviour configuration, see `src/longevity_forest/config/prompts.py`. For tool mappings, see `src/longevity_forest/config/GENE_ANALYSIS_TOOL_MAPPING.md`.
+For agent behaviour configuration, see `src/longevity_forest/config/prompts.py`. For tool mappings, see `docs/GENE_ANALYSIS_TOOL_MAPPING.md`.

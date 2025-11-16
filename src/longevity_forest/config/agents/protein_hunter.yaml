@@ -1,0 +1,107 @@
+agent_profiles:
+  protein_hunter:
+    class_qualname: just_agents.base_agent.BaseAgentWithLogging
+    description: An AI agent specialized in protein design and analysis using Boltz and Chai protein design tools
+    llm_options:
+      model: claude-sonnet-4-5
+      temperature: 0.0
+    logger_output: "file"
+    system_prompt: |2-
+
+      You are an AI protein scientist agent specialized in protein design, structure prediction, and binder generation.
+      You are able to perform advanced computational protein design using state-of-the-art AI models (Boltz and Chai).
+      You write detailed, exhaustive and accurate reports about designed proteins, their structures, and predicted binding properties.
+
+      You have access to protein design tools that can design de novo protein binders for target proteins, create cyclic peptide binders,
+      design small molecule and ligand binders, design nucleic acid (DNA/RNA) binding proteins, generate proteins for multimeric targets,
+      and perform template-based and contact-guided design.
+
+      IMPORTANT: All protein design tasks are LONG-RUNNING operations (5-10 minutes per design on GPU).
+      Always warn users about the expected runtime before starting a design.
+
+      DESIGN PARAMETERS: Always use 1 trial (or num_designs=1 for Boltz tools, n_trials=1 for Chai tools) and 5 cycles 
+      (num_cycles=5 for Boltz tools, n_cycles=5 for Chai tools) for all protein design operations unless the user explicitly 
+      requests different values.
+
+      When designing proteins always specify clear target sequences or structures, provide meaningful design names for tracking,
+      choose appropriate tools (Boltz vs Chai) based on the task, report design metrics (iPTM, pLDDT, binding scores),
+      and include structure files and sequences in results.
+
+      PROTEIN DEGRADATION DESIGN: To generate a degradation adaptor that will target a protein for degradation:
+      1. First design a high-affinity binder for the target protein using one of the binder design tools
+      2. Select the best binder from results (look for high iPTM scores like 0.9+ and good pLDDT)
+      3. Fuse ubiquitin sequence to the C-terminus of the binder:
+         Ubiquitin sequence: MQIFVKTLTGKTITLEVESSDTIDNEFMKTDWAKNNTATIPQAKQDEFIGWLVKNQQDGEWAFSGPLSPHIGQTRSDVEWEKGPYPPYCA
+      4. Optionally add a flexible linker between binder and ubiquitin (recommended linkers: GGS, GGSGGS, or GGSGGSGGS)
+      5. Final degradation adaptor format: BinderSequence + Linker + Ubiquitin
+      This creates a molecule that binds the target and recruits the ubiquitin-proteasome system for degradation.
+
+      Output the final report in an MD format, prefer tables for structuring design results and metrics.
+      ALWAYS specify output directories and file locations for designed structures.
+    tools:
+    - description: Query the UniProt database for protein information. Provide either
+        protein_id or protein_name to search for a specific protein. Always provide
+        the species parameter to ensure the correct protein is returned. Can search
+        by gene_symbol to get protein sequence.
+      function: bc_get_uniprot_protein_info
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a protein binder for a target protein using Boltz. This is
+        a simplified interface for designing protein binders with all-X sequence. Long-running
+        task 7-10 minutes per design on an H100 GPU.
+      function: ph_design_protein_binder
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a protein binder using a template structure. Uses a template
+        PDB structure to guide the design process. Long-running task 7-10 minutes
+        per design on an H100 GPU.
+      function: ph_design_protein_binder_with_template
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a protein binder with specified contact residues. Designs
+        a binder targeting specific residue positions on the target protein. Long-running
+        task 7-10 minutes per design on an H100 GPU.
+      function: ph_design_protein_binder_with_contacts
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a binder for a multimeric protein target. Designs a binder
+        for protein complexes with multiple chains like dimers. Long-running task
+        7-10 minutes per design on an H100 GPU.
+      function: ph_design_multimer_binder
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a cyclic peptide binder for a target protein. Designs short
+        cyclic peptides 10-20 residues that bind to target proteins. Long-running
+        task 7-10 minutes per design on an H100 GPU.
+      function: ph_design_cyclic_peptide_binder
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a protein binder for a small molecule. Designs proteins
+        that bind to small molecules specified by CCD codes like SAM or ATP. Long-running
+        task 7-10 minutes per design on an H100 GPU.
+      function: ph_design_small_molecule_binder
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a protein binder for DNA or RNA. Designs proteins that bind
+        to DNA or RNA sequences. Long-running task 7-10 minutes per design on an
+        H100 GPU.
+      function: ph_design_nucleic_acid_binder
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a binder for multiple target types. Designs proteins that
+        bind to both a protein and a small molecule simultaneously. Long-running task
+        7-10 minutes per design on an H100 GPU.
+      function: ph_design_heterogeneous_binder
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design de novo proteins of a desired length using Chai. Generate
+        unconditional proteins without a specific target. Long-running task 5-10 minutes
+        per design on an H100 GPU.
+      function: ph_chai_design_unconditional_protein
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a protein binder for a target protein using Chai. Designs
+        a protein that binds to a specific target protein sequence. Long-running task
+        5-10 minutes per design on an H100 GPU.
+      function: ph_chai_design_protein_binder
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a cyclic peptide binder for a target protein using Chai.
+        Designs short cyclic peptides that bind to target proteins. Long-running task
+        5-10 minutes per design on an H100 GPU.
+      function: ph_chai_design_cyclic_peptide_binder
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'
+    - description: Design a protein binder for a small molecule ligand using Chai.
+        Designs proteins that bind to small molecules specified by SMILES strings.
+        Long-running task 5-10 minutes per design on an H100 GPU.
+      function: ph_chai_design_ligand_binder
+      mcp_client_config: '{"mcpServers":{"protein-hunter-mcp":{"url":"https://protein-hunter-mcp.longevity-genie.info/mcp"}}}'

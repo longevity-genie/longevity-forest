@@ -81,6 +81,15 @@ OMNIPATH_MCP_CONFIG = {
   }
 }
 
+PROTEIN_HUNTER_MCP_CONFIG = {
+  "mcpServers": {
+    "protein-hunter-mcp": {
+      "type": "streamable-http",
+      "url": "https://protein-hunter-mcp.longevity-genie.info/mcp"
+    }
+  }
+}
+
 # JustMCPServerParameters wrappers for all MCP servers
 GGET_MCP = JustMCPServerParameters(
     mcp_client_config=GGET_MCP_CONFIG,
@@ -124,6 +133,11 @@ ATOMICA_MCP = JustMCPServerParameters(
 
 OMNIPATH_MCP = JustMCPServerParameters(
     mcp_client_config=OMNIPATH_MCP_CONFIG,
+    exclude_tools=[]
+)
+
+PROTEIN_HUNTER_MCP = JustMCPServerParameters(
+    mcp_client_config=PROTEIN_HUNTER_MCP_CONFIG,
     exclude_tools=[]
 )
 

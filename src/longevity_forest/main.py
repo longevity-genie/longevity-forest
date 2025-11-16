@@ -445,6 +445,131 @@ def analyze_genes(
         action.log(message_type="batch_analysis_complete", results=results)
 
 
+@app.command()
+def hunt_protein(
+    target: str = Argument("KLF6", help="Gene name or protein sequence to target for degradation (e.g., KLF6, TP53, FOXO3)"),
+    config: Optional[Path] = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to protein hunter configuration YAML file (defaults to config/agents/protein_hunter.yaml)"
+    ),
+    debug: bool = Option(
+        False,
+        "--debug",
+        "-d",
+        help="Show debug information"
+    ),
+    show_history: bool = Option(
+        True,
+        "--show-history/--no-history",
+        help="Display conversation history after design"
+    ),
+) -> None:
+    """
+    Design a degradation peptide for a target protein using protein hunter agent.
+    
+    This command will:
+    1. Resolve the protein sequence from gene name (if gene provided)
+    2. Design a high-affinity binder for the target protein
+    3. Generate a degradation adaptor by fusing ubiquitin to the binder
+    
+    The resulting peptide will target the protein for degradation via the ubiquitin-proteasome system.
+    """
+    setup_warnings()
+    load_dotenv()
+    
+    # Setup Eliot logging
+    json_path, log_path = setup_logging()
+    print(f"Logging initialized: {log_path}")
+    
+    with start_action(action_type="hunt_protein_command", target=target) as action:
+        # Determine config file path
+        if config is None:
+            config = Path(__file__).parent / "config/agents/protein_hunter.yaml"
+        
+        if not config.exists():
+            action.log(message_type="config_not_found", config_path=str(config))
+            typer.echo(f"Error: Configuration file not found: {config}", err=True)
+            raise typer.Exit(1)
+        
+        action.log(message_type="config_loaded", config_path=str(config))
+        
+        console = Console()
+        console.print("\n[bold cyan]Protein Hunter: Designing degradation peptide for:[/bold cyan] [bold yellow]{target}[/bold yellow]".format(target=target))
+        console.print("[dim]" + "-" * 60 + "[/dim]")
+        
+        # Load protein hunter agent
+        print("Loading protein hunter agent...")
+        protein_hunter_agent: WebAgent = WebAgent.from_yaml(
+            section_name="protein_hunter",
+            parent_section="agent_profiles",
+            file_path=config
+        )
+        print("✓ Loaded protein_hunter agent")
+        action.log(message_type="agent_loaded", agent="protein_hunter")
+        
+        # Construct the prompt for protein degradation design
+        prompt = f"""Design a degradation peptide for the target: {target}
+
+Your task:
+1. If {target} is a gene name, first resolve it to a protein sequence using appropriate tools
+2. Design a high-affinity protein binder for this target using Boltz or Chai design tools
+3. Select the best binder from the results (look for high iPTM scores 0.9+ and good pLDDT scores)
+4. Create a degradation adaptor by fusing ubiquitin to the C-terminus of the selected binder
+5. Provide the final degradation peptide sequence in the format: BinderSequence + Linker + Ubiquitin
+
+Use a flexible linker like GGSGGS between the binder and ubiquitin.
+
+Please provide:
+- The resolved target protein sequence
+- Design metrics for the binder (iPTM, pLDDT, etc.)
+- The final degradation peptide sequence
+- Output file locations for structures
+
+Generate a comprehensive report in markdown format."""
+
+        console.print("\n[bold]Sending design request to protein hunter agent...[/bold]")
+        console.print("[yellow]Note: Protein design is a long-running task (5-10 minutes per design)[/yellow]\n")
+        
+        result = protein_hunter_agent.query(query_input=prompt)
+        action.log(message_type="design_complete", target=target)
+        
+        # Save and validate results
+        if result:
+            result_str = str(result) if not isinstance(result, str) else result
+            # Use target name for filename
+            safe_target = target.replace("/", "_").replace("\\", "_")
+            filepath = save_result_to_markdown(result_str, f"degradation_peptide_{safe_target}")
+            action.log(message_type="result_saved", filepath=str(filepath))
+            
+            is_valid = validate_markdown_file(filepath)
+            file_uri = filepath.resolve().as_uri()
+            if is_valid:
+                action.log(message_type="validation_success", filepath=str(filepath))
+                typer.echo(f"\n✓ Degradation peptide design successfully saved and validated: {filepath}")
+                typer.echo(f"  Open report: {file_uri}")
+            else:
+                action.log(message_type="validation_warning", filepath=str(filepath))
+                typer.echo(f"\n⚠ Degradation peptide design saved but validation had issues: {filepath}")
+                typer.echo(f"  Open report: {file_uri}")
+        else:
+            action.log(message_type="no_result", target=target)
+            typer.echo("✗ No result returned from protein hunter agent", err=True)
+            raise typer.Exit(1)
+        
+        # Display conversation history
+        if show_history:
+            print("\n" + "="*60)
+            print("CONVERSATION HISTORY")
+            print("="*60)
+            if hasattr(protein_hunter_agent, 'memory'):
+                print(f"\n{protein_hunter_agent.description if hasattr(protein_hunter_agent, 'description') else 'Protein Hunter Agent'}:")
+                protein_hunter_agent.memory.pretty_print_all_messages()
+            # Repeat report link after history for convenience
+            print(f"\nOpen report: {file_uri}")
+
+
 def main() -> None:
     """Main entry point for the CLI."""
     app()

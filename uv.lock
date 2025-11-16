@@ -1229,6 +1229,7 @@ source = { editable = "." }
 dependencies = [
     { name = "just-agents" },
     { name = "pycomfort" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "typer" },
     { name = "win-unicode-console" },
@@ -1238,6 +1239,7 @@ dependencies = [
 requires-dist = [
     { name = "just-agents", specifier = ">=0.8.8" },
     { name = "pycomfort", specifier = ">=0.0.18" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "typer", specifier = ">=0.20.0" },
     { name = "win-unicode-console", specifier = ">=0.5" },
