@@ -195,8 +195,7 @@ def load_agents(config_file: Path, debug: bool = False, enable_cache: bool = Tru
 
 def run_gene_analysis(
     query_agent: WebAgent,
-    gene_name: str,
-    show_history: bool = False
+    gene_name: str
 ) -> Optional[str]:
     """
     Run gene analysis for a given gene.
@@ -204,7 +203,6 @@ def run_gene_analysis(
     Args:
         query_agent: The main query agent
         gene_name: Name of the gene to analyze
-        show_history: Whether to display conversation history
     
     Returns:
         The analysis result as a string, or None if failed
@@ -312,7 +310,7 @@ def analyze_gene(
         agents, query_agent = load_agents(config, debug=debug, enable_cache=cache)
         
         # Run analysis
-        result = run_gene_analysis(query_agent, gene_name, show_history=show_history)
+        result = run_gene_analysis(query_agent, gene_name)
         
         # Save and validate results
         if result:
@@ -412,7 +410,7 @@ def analyze_genes(
         results = {}
         for gene_name in genes:
             with start_action(action_type="analyze_single_gene", gene_name=gene_name) as gene_action:
-                result = run_gene_analysis(query_agent, gene_name, show_history=show_history)
+                result = run_gene_analysis(query_agent, gene_name)
                 
                 if result:
                     result_str = str(result) if not isinstance(result, str) else result
