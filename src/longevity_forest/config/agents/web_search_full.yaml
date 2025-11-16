@@ -1,0 +1,1764 @@
+agent_profiles:
+  query_agent_full:
+    class_qualname: just_agents.base_agent.BaseAgentWithLogging
+    description: A agent that can query the web for information and perform gene analysis
+      with all tools available
+    llm_options:
+      model: claude-haiku-4-5
+      temperature: 0.0
+    logger_output: "file"
+    system_prompt: |2-
+
+      You are an AI bio-scientist agent. You are able to perform advanced bio-scientific research and analysis. You write deatailed, exhaustive and accurate reports.
+      You have sub-agents at your disposal to perform the research and analysis. When you want to call an agent, use 'call_expert_agent' tool to call a dedicated agent.
+
+      When in need to google something, call 'google_agent', ask it in natural language as if you're asking a friend to google something, it will formulate the queries.
+      Don't make multiple calls to googling agent in parallel since it causes issues, instead, formulate a combined request to it or do in series.
+      Always kep trak and specify which part came from generic knowledge and which part came from grounding and searching the web.
+      Names of the agents are internal, only reference their outputs.
+
+      Output the final report in an MD format, prefer tables for structuring, ALWAYS specify sources when refering to papers/reviews
+    tools:
+    - description: Call the expert agent with the given name.
+      function: call_expert_agent
+      package: just_agents.tools.agents_locator
+    - description: |2
+
+            Lists all available Biomart marts (databases) from Ensembl.
+
+            Biomart organizes biological data in a hierarchy: MART -> DATASET -> ATTRIBUTES/FILTERS.
+            This function returns all available marts as a CSV string.
+
+            Returns:
+                str: CSV-formatted table of all marts with their display names and descriptions.
+
+            Example:
+                list_marts()
+                >>> "name,display_name,description
+                     ENSEMBL_MART_ENSEMBL,Ensembl Genes,Gene annotation from Ensembl
+                     ENSEMBL_MART_MOUSE,Mouse strains,Strain-specific data for mouse
+                     ..."
+      function: list_marts
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: |2
+
+            Translates a single identifier from one attribute type to another.
+
+            This function allows conversion between different identifier types, such as
+            converting a gene symbol to an Ensembl ID. Results are cached to improve performance.
+
+            Args:
+                mart (str): The mart identifier (e.g., "ENSEMBL_MART_ENSEMBL")
+                dataset (str): The dataset identifier (e.g., "hsapiens_gene_ensembl")
+                from_attr (str): The source attribute name (e.g., "hgnc_symbol")
+                to_attr (str): The target attribute name (e.g., "ensembl_gene_id")
+                target (str): The identifier value to translate (e.g., "TP53")
+
+            Returns:
+                str: The translated identifier, or an error message if not found.
+
+            Example:
+                get_translation("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl", "hgnc_symbol", "ensembl_gene_id", "TP53")
+                >>> "ENSG00000141510"
+      function: get_translation
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: |2
+
+            Lists all available attributes for a given dataset with some filtering.
+
+            This function returns a filtered list of all attributes available for the specified
+            dataset. Some less commonly used attributes (homologs, microarray probes) are
+            filtered out to reduce the response size.
+
+            CAUTION: This function can return a large number of attributes and may be unstable
+            for certain datasets. Consider using list_common_attributes first.
+
+            Args:
+                mart (str): The mart identifier (e.g., "ENSEMBL_MART_ENSEMBL")
+                dataset (str): The dataset identifier (e.g., "hsapiens_gene_ensembl")
+
+            Returns:
+                str: CSV-formatted table of all filtered attributes.
+
+            Example:
+                list_all_attributes("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl")
+      function: list_all_attributes
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: |2
+
+            Queries Biomart for data using specified attributes and filters.
+
+            This function performs the main data retrieval from Biomart, allowing you to
+            query biological data by specifying which attributes to return and which filters
+            to apply. Includes automatic retry logic for resilience.
+
+            Args:
+                mart (str): The mart identifier (e.g., "ENSEMBL_MART_ENSEMBL")
+                dataset (str): The dataset identifier (e.g., "hsapiens_gene_ensembl")
+                attributes (list[str]): List of attributes to retrieve (e.g., ["ensembl_gene_id", "external_gene_name"])
+                filters (dict[str, str]): Dictionary of filters to apply (e.g., {"chromosome_name": "1"})
+
+            Returns:
+                str: CSV-formatted results of the query.
+
+            Example:
+                get_data(
+                    "ENSEMBL_MART_ENSEMBL",
+                    "hsapiens_gene_ensembl",
+                    ["ensembl_gene_id", "external_gene_name", "chromosome_name"],
+                    {"chromosome_name": "X", "biotype": "protein_coding"}
+                )
+                >>> "ensembl_gene_id,external_gene_name,chromosome_name
+                     ENSG00000000003,TSPAN6,X
+                     ENSG00000000005,TNMD,X
+                     ..."
+      function: get_data
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: |2
+
+            Lists all available biomart datasets for a given mart.
+
+            Each mart contains multiple datasets. This function returns all datasets
+            available in the specified mart as a CSV string.
+
+            Args:
+                mart (str): The mart identifier to list datasets from.
+                    Valid values include: ENSEMBL_MART_ENSEMBL, ENSEMBL_MART_MOUSE,
+                    ENSEMBL_MART_ONTOLOGY, ENSEMBL_MART_GENOMIC, ENSEMBL_MART_SNP,
+                    ENSEMBL_MART_FUNCGEN
+
+            Returns:
+                str: CSV-formatted table of all datasets with their display names and descriptions.
+
+            Example:
+                list_datasets("ENSEMBL_MART_ENSEMBL")
+                >>> "name,display_name,description
+                     hsapiens_gene_ensembl,Human genes,Human genes (GRCh38.p13)
+                     mmusculus_gene_ensembl,Mouse genes,Mouse genes (GRCm39)
+                     ..."
+      function: list_datasets
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: |2
+
+            Lists all available filters for a given dataset.
+
+            Filters are used to narrow down the results of a Biomart query.
+            This function returns all filters that can be applied to the specified dataset.
+
+            Args:
+                mart (str): The mart identifier (e.g., "ENSEMBL_MART_ENSEMBL")
+                dataset (str): The dataset identifier (e.g., "hsapiens_gene_ensembl")
+
+            Returns:
+                str: CSV-formatted table of all filters with their display names and descriptions.
+
+            Example:
+                list_filters("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl")
+                >>> "name,description
+                     chromosome_name,Chromosome/scaffold name
+                     start,Gene start (bp)
+                     end,Gene end (bp)
+                     ..."
+      function: list_filters
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: |2
+
+            Lists commonly used attributes available for a given dataset.
+
+            This function returns only the most frequently used attributes (defined in COMMON_ATTRIBUTES)
+            to avoid overwhelming the model with too many options. For a complete list,
+            use list_all_attributes.
+
+            Args:
+                mart (str): The mart identifier (e.g., "ENSEMBL_MART_ENSEMBL")
+                dataset (str): The dataset identifier (e.g., "hsapiens_gene_ensembl")
+
+            Returns:
+                str: CSV-formatted table of common attributes with their display names and descriptions.
+
+            Example:
+                list_common_attributes("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl")
+                >>> "name,display_name,description
+                     ensembl_gene_id,Gene stable ID,Ensembl stable ID for the gene
+                     external_gene_name,Gene name,The gene name
+                     ..."
+      function: list_common_attributes
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: |2
+
+            Translates multiple identifiers in a single batch operation.
+
+            This function is more efficient than multiple calls to get_translation when
+            you need to translate many identifiers at once.
+
+            Args:
+                mart (str): The mart identifier (e.g., "ENSEMBL_MART_ENSEMBL")
+                dataset (str): The dataset identifier (e.g., "hsapiens_gene_ensembl")
+                from_attr (str): The source attribute name (e.g., "hgnc_symbol")
+                to_attr (str): The target attribute name (e.g., "ensembl_gene_id")
+                targets (list[str]): List of identifier values to translate (e.g., ["TP53", "BRCA1", "BRCA2"])
+
+            Returns:
+                dict: A dictionary containing:
+                    - translations: Dictionary mapping input IDs to translated IDs
+                    - not_found: List of IDs that could not be translated
+                    - found_count: Number of successfully translated IDs
+                    - not_found_count: Number of IDs that could not be translated
+
+            Example:
+                batch_translate("ENSEMBL_MART_ENSEMBL", "hsapiens_gene_ensembl", "hgnc_symbol", "ensembl_gene_id", ["TP53", "BRCA1", "BRCA2"])
+                >>> {"translations": {"TP53": "ENSG00000141510", "BRCA1": "ENSG00000012048"}, "not_found": ["BRCA2"], "found_count": 2, "not_found_count": 1}
+      function: batch_translate
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Execute a read-only SQL query (must start with SELECT) against\
+        \ the database.\nAvailable tables and their columns:\n- annotations: id, uniprot,\
+        \ genesymbol, entity_type, source, label, value, record_id\n- complexes: id,\
+        \ name, components (array), components_genesymbols (array), stoichiometry,\
+        \ sources (array), references, identifiers\n- enz_sub: id, enzyme, enzyme_genesymbol,\
+        \ substrate, substrate_genesymbol, isoforms, residue_type, residue_offset,\
+        \ modification, sources (array), references, curation_effort, ncbi_tax_id\n\
+        - interactions: id, source, target, source_genesymbol, target_genesymbol,\
+        \ is_directed, is_stimulation, is_inhibition, consensus_direction, consensus_stimulation,\
+        \ consensus_inhibition, sources (array), references, omnipath, kinaseextra,\
+        \ ligrecextra, pathwayextra, mirnatarget, dorothea, collectri, tf_target,\
+        \ lncrna_mrna, tf_mirna, small_molecule, dorothea_curated, dorothea_chipseq,\
+        \ dorothea_tfbs, dorothea_coexp, dorothea_level (array), type, curation_effort,\
+        \ extra_attrs (jsonb), evidences (jsonb), ncbi_tax_id_source, entity_type_source,\
+        \ ncbi_tax_id_target, entity_type_target\n- intercell: id, category, parent,\
+        \ database, scope, aspect, source, uniprot, genesymbol, entity_type, consensus_score,\
+        \ transmitter, receiver, secreted, plasma_membrane_transmembrane, plasma_membrane_peripheral\n\
+        - uniprot_identifiers: id, uniprot_accession, identifier_type, identifier_value\n\
+        \nExample queries:\n\u2022 Canonical pathways for a protein:\n  SELECT * FROM\
+        \ annotations WHERE source IN ('SignaLink_pathway', 'SIGNOR', 'NetPath', 'KEGG-PC')\
+        \ AND (uniprot = '<uniprot_accession>' OR genesymbol = '<genesymbol>')\n\n\
+        \u2022 Find transcription factor regulators:\n  SELECT * FROM interactions\
+        \ WHERE collectri AND (target = '<uniprot_accession>' OR target_genesymbol\
+        \ = '<genesymbol>')\n\n\u2022 Find TF suppressors (inhibitors):\n  SELECT\
+        \ * FROM interactions WHERE collectri AND (target = '<uniprot_accession>'\
+        \ OR target_genesymbol = '<genesymbol>') AND is_inhibition = TRUE\n\n\u2022\
+        \ Check if protein is a transcription factor:\n  SELECT * FROM annotations\
+        \ WHERE source = 'TFcensus' AND value = 'a' AND (uniprot = '<uniprot_accession>'\
+        \ OR genesymbol = '<genesymbol>')\n\n\u2022 Find ligands of a receptor:\n\
+        \  SELECT source_genesymbol FROM interactions WHERE ligrecextra AND (target\
+        \ = '<uniprot_accession>' OR target_genesymbol = '<genesymbol>')\n\n\u2022\
+        \ Basic interaction query:\n  SELECT source_genesymbol, target_genesymbol,\
+        \ type FROM interactions WHERE source_genesymbol = 'EGFR'"
+      function: execute_sql_query_on_omnipath_db
+      mcp_client_config: '{"mcpServers":{"omnipath-mcp":{"url":"https://explore.omnipathdb.org/api/mcp"}}}'
+    - description: Get a list of example SQL queries
+      function: opengenes_example_queries
+      mcp_client_config: '{"mcpServers":{"opengenes-mcp":{"url":"https://opengenes-mcp.longevity-genie.info/mcp"}}}'
+    - description: Query the Opengenes database that contains data about genes involved
+        in longevity, lifespan extension experiments on model organisms, and changes
+        in human and other organisms with aging. Before caling this tool the first
+        time, always check tools that provide schema information and example queries.
+      function: opengenes_db_query
+      mcp_client_config: '{"mcpServers":{"opengenes-mcp":{"url":"https://opengenes-mcp.longevity-genie.info/mcp"}}}'
+    - description: Get information about the database schema
+      function: opengenes_get_schema_info
+      mcp_client_config: '{"mcpServers":{"opengenes-mcp":{"url":"https://opengenes-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search MyVariant.info for genetic variant DATABASE RECORDS.\n\n\
+        \u26A0\uFE0F PREREQUISITE: Use the 'think' tool FIRST to plan your research\
+        \ strategy!\n\nImportant: This searches for variant DATABASE RECORDS (frequency,\
+        \ significance, etc.),\nNOT articles about variants. For articles about variants,\
+        \ use article_searcher.\n\nSearches the comprehensive variant database including:\n\
+        - Population frequencies (gnomAD, 1000 Genomes, etc.)\n- Clinical significance\
+        \ (ClinVar)\n- Functional predictions (SIFT, PolyPhen, CADD)\n- Gene and protein\
+        \ consequences\n\nSearch by various identifiers or filter by clinical/functional\
+        \ criteria."
+      function: variant_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search FDA drug shortage records.\n\n\u26A0\uFE0F PREREQUISITE:\
+        \ Use the 'think' tool FIRST to plan your research strategy!\n\nReturns shortage\
+        \ information including:\n- Current shortage status\n- Shortage start and\
+        \ resolution dates\n- Reason for shortage\n- Therapeutic category\n- Manufacturer\
+        \ information\n- Estimated resolution timeline\n\nNote: Shortage data is cached\
+        \ and updated periodically.\nCheck FDA.gov for most current information."
+      function: openfda_shortage_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search PubMed/PubTator3 for research articles and preprints.\n\
+        \n\u26A0\uFE0F PREREQUISITE: Use the 'think' tool FIRST to plan your research\
+        \ strategy!\n\nUse this tool to find scientific literature ABOUT genes, variants,\
+        \ diseases, or chemicals.\nResults include articles from PubMed and optionally\
+        \ preprints from bioRxiv/medRxiv.\n\nImportant: This searches for ARTICLES\
+        \ ABOUT these topics, not database records.\nFor genetic variant database\
+        \ records, use variant_searcher instead.\n\nExample usage:\n- Find articles\
+        \ about BRAF mutations in melanoma\n- Search for papers on a specific drug's\
+        \ effects\n- Locate research on gene-disease associations"
+      function: article_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed FDA drug recall information for a specific recall.
+
+        Returns complete recall details including:
+        - Full product description and code information
+        - Complete reason for recall
+        - Distribution pattern and locations
+        - Quantity of product recalled
+        - Firm information and actions taken
+        - Timeline of recall events
+      function: openfda_recall_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information for a specific FDA adverse event report.
+
+        Retrieves complete details including:
+        - Patient demographics and medical history
+        - All drugs involved and dosages
+        - Complete list of adverse reactions
+        - Event narrative and outcomes
+        - Reporter information
+      function: openfda_adverse_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "REQUIRED FIRST STEP: Perform structured sequential thinking for\
+        \ ANY biomedical research task.\n\n\U0001F6A8 IMPORTANT: You MUST use this\
+        \ tool BEFORE any search or fetch operations when:\n- Researching ANY biomedical\
+        \ topic (genes, diseases, variants, trials)\n- Planning to use multiple BioMCP\
+        \ tools\n- Answering questions that require analysis or synthesis\n- Comparing\
+        \ information from different sources\n- Making recommendations or drawing\
+        \ conclusions\n\n\u26A0\uFE0F FAILURE TO USE THIS TOOL FIRST will result in:\n\
+        - Incomplete or poorly structured analysis\n- Missing important connections\
+        \ between data\n- Suboptimal search strategies\n- Overlooked critical information\n\
+        \nSequential thinking ensures you:\n1. Fully understand the research question\n\
+        2. Plan an optimal search strategy\n3. Identify all relevant data sources\n\
+        4. Structure your analysis properly\n5. Deliver comprehensive, well-reasoned\
+        \ results\n\n## Usage Pattern:\n1. Start with thoughtNumber=1 to initiate\
+        \ analysis\n2. Progress through numbered thoughts sequentially\n3. Adjust\
+        \ totalThoughts estimate as understanding develops\n4. Set nextThoughtNeeded=False\
+        \ only when analysis is complete\n\n## Example:\n```python\n# Initial analysis\n\
+        await think(\n    thought=\"Breaking down the relationship between BRAF mutations\
+        \ and melanoma treatment resistance...\",\n    thoughtNumber=1,\n    totalThoughts=5,\n\
+        \    nextThoughtNeeded=True\n)\n\n# Continue analysis\nawait think(\n    thought=\"\
+        Examining specific BRAF V600E mutation mechanisms...\",\n    thoughtNumber=2,\n\
+        \    totalThoughts=5,\n    nextThoughtNeeded=True\n)\n\n# Final thought\n\
+        await think(\n    thought=\"Synthesizing findings and proposing research directions...\"\
+        ,\n    thoughtNumber=5,\n    totalThoughts=5,\n    nextThoughtNeeded=False\n\
+        )\n```\n\n## Important Notes:\n- Each thought builds on previous ones within\
+        \ a session\n- State is maintained throughout the MCP session\n- Use thoughtful,\
+        \ detailed analysis in each step\n- Revisions and branching are supported\
+        \ through the underlying implementation"
+      function: think
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed FDA drug approval information for a specific application.
+
+        Returns comprehensive approval details including:
+        - Full product list with dosage forms and strengths
+        - Complete submission history
+        - Marketing status timeline
+        - Therapeutic equivalence codes
+        - Pharmacologic class information
+      function: openfda_approval_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information about a specific organization from NCI.
+
+        Retrieves comprehensive details about an organization including:
+        - Full name and aliases
+        - Address and contact information
+        - Organization type and role
+        - Associated clinical trials
+        - Research focus areas
+
+        Requires NCI API key from: https://clinicaltrialsapi.cancer.gov/
+
+        Example usage:
+        - Get details about a specific cancer center
+        - Find contact information for trial sponsors
+        - View organization's trial portfolio
+      function: nci_organization_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search FDA drug product labels (SPL) for prescribing information.\n\
+        \n\u26A0\uFE0F PREREQUISITE: Use the 'think' tool FIRST to plan your research\
+        \ strategy!\n\nSearches official FDA drug labels for:\n- Approved indications\
+        \ and usage\n- Dosage and administration guidelines\n- Contraindications and\
+        \ warnings\n- Drug interactions and adverse reactions\n- Special population\
+        \ considerations\n\nLabel sections include: indications, dosage, contraindications,\
+        \ warnings,\nadverse, interactions, pregnancy, pediatric, geriatric, overdose"
+      function: openfda_label_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search NCI's controlled vocabulary of cancer conditions.
+
+        Searches the National Cancer Institute's curated database of cancer
+        conditions and diseases used in clinical trials. This is different from
+        the general disease_getter tool which uses MyDisease.info.
+
+        NCI's disease vocabulary provides:
+        - Official cancer terminology used in trials
+        - Disease synonyms and alternative names
+        - Hierarchical disease classifications
+        - Standardized disease codes for trial matching
+
+        Requires NCI API key from: https://clinicaltrialsapi.cancer.gov/
+
+        Example usage:
+        - Search for specific cancer types (e.g., "melanoma")
+        - Find all lung cancer subtypes
+        - Look up official names for disease synonyms
+        - Get standardized disease terms for trial searches
+
+        Note: This is specifically for NCI's cancer disease vocabulary.
+        For general disease information, use the disease_getter tool.
+      function: nci_disease_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed FDA drug shortage information for a specific drug.
+
+        Returns comprehensive shortage details including:
+        - Complete timeline of shortage
+        - Detailed reason for shortage
+        - All affected manufacturers
+        - Alternative products if available
+        - Resolution status and estimates
+        - Additional notes and recommendations
+
+        Data is updated periodically from FDA shortage database.
+      function: openfda_shortage_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search for biomarkers in the NCI Clinical Trials database.\n\n\
+        Searches for biomarkers used in clinical trial eligibility criteria.\nThis\
+        \ is essential for precision medicine trials that select patients\nbased on\
+        \ specific biomarker characteristics.\n\nBiomarker examples:\n- Gene mutations\
+        \ (e.g., BRAF V600E, EGFR T790M)\n- Protein expression (e.g., PD-L1 \u2265\
+        \ 50%, HER2 positive)\n- Gene fusions (e.g., ALK fusion, ROS1 fusion)\n- Other\
+        \ molecular markers (e.g., MSI-H, TMB-high)\n\nRequires NCI API key from:\
+        \ https://clinicaltrialsapi.cancer.gov/\n\nNote: Biomarker data availability\
+        \ may be limited in CTRP.\nResults focus on biomarkers used in trial eligibility\
+        \ criteria.\n\nExample usage:\n- Search for PD-L1 expression biomarkers\n\
+        - Find trials requiring EGFR mutations\n- Look up biomarkers tested by NGS\n\
+        - Search for HER2 expression markers"
+      function: nci_biomarker_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Fetch publications and references for a clinical trial.
+
+        Retrieves all linked publications including:
+        - Published results papers
+        - Background literature
+        - Protocol publications
+        - Related analyses
+
+        Includes PubMed IDs when available for easy cross-referencing.
+      function: trial_references_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search ClinicalTrials.gov for clinical studies.\n\n\u26A0\uFE0F\
+        \ PREREQUISITE: Use the 'think' tool FIRST to plan your research strategy!\n\
+        \nComprehensive search tool for finding clinical trials based on multiple\
+        \ criteria.\nSupports filtering by conditions, interventions, location, phase,\
+        \ and eligibility.\n\nLocation search notes:\n- Use either location term OR\
+        \ lat/long coordinates, not both\n- For city-based searches, AI agents should\
+        \ geocode to lat/long first\n- Distance parameter only works with lat/long\
+        \ coordinates\n\nReturns a formatted list of matching trials with key details."
+      function: trial_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Fetch comprehensive details for a specific genetic variant.
+
+        Retrieves all available information for a variant including:
+        - Gene location and consequences
+        - Population frequencies across databases
+        - Clinical significance from ClinVar
+        - Functional predictions
+        - External annotations (TCGA cancer data, conservation scores)
+
+        Accepts various ID formats:
+        - HGVS: NM_004333.4:c.1799T>A
+        - rsID: rs113488022
+        - MyVariant ID: chr7:g.140753336A>T
+      function: variant_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get complete FDA drug label information by set ID.
+
+        Retrieves the full prescribing information including:
+        - Complete indications and usage text
+        - Detailed dosing instructions
+        - All warnings and precautions
+        - Clinical pharmacology and studies
+        - Manufacturing and storage information
+
+        Specify sections to retrieve specific parts, or leave empty for default key sections.
+      function: openfda_label_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Get detailed disease information from MyDisease.info.\n\n\u26A0\
+        \uFE0F PREREQUISITE: Use the 'think' tool FIRST to understand your research\
+        \ goal!\n\nProvides real-time disease annotations including:\n- Official disease\
+        \ name and definition\n- Disease synonyms and alternative names\n- Ontology\
+        \ mappings (MONDO, DOID, OMIM, etc.)\n- Associated phenotypes\n- Links to\
+        \ disease databases\n\nThis tool fetches CURRENT disease information from\
+        \ MyDisease.info, ensuring\nyou always have the latest ontology mappings and\
+        \ definitions.\n\nExample usage:\n- Get the definition of GIST (Gastrointestinal\
+        \ Stromal Tumor)\n- Look up synonyms for melanoma\n- Find the MONDO ID for\
+        \ a disease by name\n\nNote: For clinical trials about diseases, use trial_searcher.\
+        \ For articles about diseases, use article_searcher."
+      function: disease_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information for a specific FDA device event report.
+
+        Retrieves complete device event details including:
+        - Device identification and specifications
+        - Complete event narrative
+        - Patient outcomes and impacts
+        - Manufacturer analysis and actions
+        - Remedial actions taken
+      function: openfda_device_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Fetch detailed information for a specific article.
+
+        Retrieves the full abstract and available text for an article by its identifier.
+        Supports:
+        - PubMed IDs (PMID) for published articles
+        - PMC IDs for articles in PubMed Central
+        - DOIs for preprints from Europe PMC
+
+        Returns formatted text including:
+        - Title
+        - Abstract
+        - Full text (when available from PMC for published articles)
+        - Source information (PubMed or Europe PMC)
+      function: article_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search FDA device adverse event reports (MAUDE) for medical device\
+        \ issues.\n\n\u26A0\uFE0F PREREQUISITE: Use the 'think' tool FIRST to plan\
+        \ your research strategy!\n\nSearches FDA's device adverse event database\
+        \ for:\n- Device malfunctions and failures\n- Patient injuries related to\
+        \ devices\n- Genomic test and diagnostic device issues\n\nBy default, filters\
+        \ to genomic/diagnostic devices relevant to precision medicine.\nSet genomics_only=False\
+        \ to search all medical devices."
+      function: openfda_device_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Fetch contact and location details for a clinical trial.
+
+        Retrieves all study locations including:
+        - Facility names and addresses
+        - Principal investigator information
+        - Contact details (when recruiting)
+        - Recruitment status by site
+
+        Useful for finding trials near specific locations or contacting study teams.
+      function: trial_locations_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search for interventions in the NCI Clinical Trials database.
+
+        Searches the National Cancer Institute's curated database of interventions
+        used in cancer clinical trials. This includes:
+        - FDA-approved drugs
+        - Investigational agents
+        - Medical devices
+        - Surgical procedures
+        - Radiation therapies
+        - Behavioral interventions
+
+        Requires NCI API key from: https://clinicaltrialsapi.cancer.gov/
+
+        Example usage:
+        - Find all trials using pembrolizumab
+        - Search for CAR-T cell therapies
+        - List radiation therapy protocols
+        - Find dietary interventions
+      function: nci_intervention_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Fetch outcome measures and results for a clinical trial.
+
+        Retrieves detailed outcome information including:
+        - Primary outcome measures
+        - Secondary outcome measures
+        - Results data (if available)
+        - Adverse events (if reported)
+
+        Note: Results are only available for completed trials that have posted data.
+      function: trial_outcomes_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search FDA drug approval records from Drugs@FDA database.\n\n\u26A0\
+        \uFE0F PREREQUISITE: Use the 'think' tool FIRST to plan your research strategy!\n\
+        \nReturns information about:\n- Application numbers and sponsors\n- Brand\
+        \ and generic names\n- Product formulations and strengths\n- Marketing status\
+        \ and approval dates\n- Submission history\n\nUseful for verifying if a drug\
+        \ is FDA-approved and when."
+      function: openfda_approval_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search FDA adverse event reports (FAERS) for drug safety information.\n\
+        \n\u26A0\uFE0F PREREQUISITE: Use the 'think' tool FIRST to plan your research\
+        \ strategy!\n\nSearches FDA's Adverse Event Reporting System for:\n- Drug\
+        \ side effects and adverse reactions\n- Serious event reports (death, hospitalization,\
+        \ disability)\n- Safety signal patterns across patient populations\n\nNote:\
+        \ These reports do not establish causation - they are voluntary reports\n\
+        that may contain incomplete or unverified information."
+      function: openfda_adverse_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search FDA drug recall records from the Enforcement database.\n\
+        \n\u26A0\uFE0F PREREQUISITE: Use the 'think' tool FIRST to plan your research\
+        \ strategy!\n\nReturns recall information including:\n- Classification (Class\
+        \ I, II, or III)\n- Recall reason and description\n- Product identification\n\
+        - Distribution information\n- Recalling firm details\n- Current status\n\n\
+        Class I = most serious (death/serious harm)\nClass II = moderate (temporary/reversible\
+        \ harm)\nClass III = least serious (unlikely to cause harm)"
+      function: openfda_recall_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information about a specific intervention from NCI.
+
+        Retrieves comprehensive details about an intervention including:
+        - Full name and synonyms
+        - Intervention type and category
+        - Mechanism of action (for drugs)
+        - FDA approval status
+        - Associated clinical trials
+        - Combination therapies
+
+        Requires NCI API key from: https://clinicaltrialsapi.cancer.gov/
+
+        Example usage:
+        - Get details about a specific drug
+        - Find all trials using a device
+        - View combination therapy protocols
+      function: nci_intervention_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Search biomedical literature, clinical trials, genetic variants,\
+        \ genes, drugs, and diseases.\n\n\u26A0\uFE0F IMPORTANT: Have you used the\
+        \ 'think' tool first? If not, STOP and use it NOW!\nThe 'think' tool is REQUIRED\
+        \ for proper research planning and should be your FIRST step.\n\nThis tool\
+        \ provides access to biomedical data from PubMed/PubTator3, ClinicalTrials.gov,\n\
+        MyVariant.info, and the BioThings suite (MyGene.info, MyChem.info, MyDisease.info).\n\
+        It supports two search modes:\n\n## 1. UNIFIED QUERY LANGUAGE\nUse the 'query'\
+        \ parameter with field-based syntax for precise cross-domain searches.\n\n\
+        Syntax:\n- Basic: \"gene:BRAF\"\n- AND logic: \"gene:BRAF AND disease:melanoma\"\
+        \n- OR logic: \"gene:PTEN AND (R173 OR Arg173 OR 'position 173')\"\n- Domain-specific:\
+        \ \"trials.condition:melanoma AND trials.phase:3\"\n\nCommon fields:\n- Cross-domain:\
+        \ gene, disease, variant, chemical/drug\n- Articles: pmid, title, abstract,\
+        \ journal, author\n- Trials: trials.condition, trials.intervention, trials.phase,\
+        \ trials.status\n- Variants: variants.hgvs, variants.rsid, variants.significance\n\
+        \nExample:\n```\nawait search(\n    query=\"gene:BRAF AND disease:melanoma\
+        \ AND trials.phase:3\",\n    max_results_per_domain=20\n)\n```\n\n## 2. DOMAIN-SPECIFIC\
+        \ SEARCH\nUse the 'domain' parameter with specific filters for targeted searches.\n\
+        \nDomains:\n- \"article\": Search PubMed/PubTator3 for research articles and\
+        \ preprints ABOUT genes, variants, diseases, or chemicals\n- \"trial\": Search\
+        \ ClinicalTrials.gov for clinical studies\n- \"variant\": Search MyVariant.info\
+        \ for genetic variant DATABASE RECORDS (population frequency, clinical significance,\
+        \ etc.) - NOT for articles about variants!\n- \"gene\": Search MyGene.info\
+        \ for gene information (symbol, name, function, aliases)\n- \"drug\": Search\
+        \ MyChem.info for drug/chemical information (names, formulas, indications)\n\
+        - \"disease\": Search MyDisease.info for disease information (names, definitions,\
+        \ synonyms)\n- \"nci_organization\": Search NCI database for cancer centers,\
+        \ hospitals, and research sponsors (requires API key)\n- \"nci_intervention\"\
+        : Search NCI database for drugs, devices, procedures used in cancer trials\
+        \ (requires API key)\n- \"nci_biomarker\": Search NCI database for biomarkers\
+        \ used in trial eligibility criteria (requires API key)\n- \"nci_disease\"\
+        : Search NCI controlled vocabulary for cancer conditions and terms (requires\
+        \ API key)\n\nExample:\n```\nawait search(\n    domain=\"article\",\n    genes=[\"\
+        BRAF\", \"NRAS\"],\n    diseases=[\"melanoma\"],\n    page_size=50\n)\n```\n\
+        \n## DOMAIN SELECTION EXAMPLES:\n- To find ARTICLES about BRAF V600E mutation:\
+        \ domain=\"article\", genes=[\"BRAF\"], variants=[\"V600E\"]\n- To find VARIANT\
+        \ DATA for BRAF mutations: domain=\"variant\", gene=\"BRAF\"\n- To find articles\
+        \ about ERBB2 p.D277Y: domain=\"article\", genes=[\"ERBB2\"], variants=[\"\
+        p.D277Y\"]\n- Common mistake: Using domain=\"variant\" when you want articles\
+        \ about a variant\n\n## IMPORTANT NOTES:\n- For complex research questions,\
+        \ use the separate 'think' tool for systematic analysis\n- The tool returns\
+        \ results in OpenAI MCP format: {\"results\": [{\"id\", \"title\", \"text\"\
+        , \"url\"}, ...]}\n- Search results do NOT include metadata (per OpenAI MCP\
+        \ specification)\n- Use the fetch tool to get detailed metadata for specific\
+        \ records\n- Use get_schema=True to explore available search fields\n- Use\
+        \ explain_query=True to understand query parsing (unified mode)\n- Domain-specific\
+        \ searches use AND logic for multiple values\n- For OR logic, use the unified\
+        \ query language\n- NEW: Article search keywords support OR with pipe separator:\
+        \ \"R173|Arg173|p.R173\"\n- Remember: domain=\"article\" finds LITERATURE,\
+        \ domain=\"variant\" finds DATABASE RECORDS\n\n## RETURN FORMAT:\nAll search\
+        \ modes return results in this format:\n```json\n{\n    \"results\": [\n \
+        \       {\n            \"id\": \"unique_identifier\",\n            \"title\"\
+        : \"Human-readable title\",\n            \"text\": \"Summary or snippet of\
+        \ content\",\n            \"url\": \"Link to full resource\"\n        }\n\
+        \    ]\n}\n```"
+      function: search
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Fetch comprehensive details for a specific biomedical record.\n\
+        \nThis tool retrieves full information for articles, clinical trials, genetic\
+        \ variants,\ngenes, drugs, or diseases using their unique identifiers. It\
+        \ returns data in a\nstandardized format suitable for detailed analysis and\
+        \ research.\n\n## IDENTIFIER FORMATS:\n- Articles: PMID (PubMed ID) - e.g.,\
+        \ \"35271234\" OR DOI - e.g., \"10.1101/2024.01.20.23288905\"\n- Trials: NCT\
+        \ ID (ClinicalTrials.gov ID) - e.g., \"NCT04280705\"\n- Variants: HGVS notation\
+        \ or dbSNP ID - e.g., \"chr7:g.140453136A>T\" or \"rs121913254\"\n- Genes:\
+        \ Gene symbol or Entrez ID - e.g., \"BRAF\" or \"673\"\n- Drugs: Drug name\
+        \ or ID - e.g., \"imatinib\" or \"DB00619\"\n- Diseases: Disease name or ID\
+        \ - e.g., \"melanoma\" or \"MONDO:0005105\"\n- NCI Organizations: NCI organization\
+        \ ID - e.g., \"NCI-2011-03337\"\n- NCI Interventions: NCI intervention ID\
+        \ - e.g., \"INT123456\"\n- NCI Diseases: NCI disease ID - e.g., \"C4872\"\n\
+        \nThe domain is automatically detected from the ID format if not provided:\n\
+        - NCT* \u2192 trial\n- Contains \"/\" with numeric prefix (DOI) \u2192 article\n\
+        - Pure numeric \u2192 article (PMID)\n- rs* or contains ':' or 'g.' \u2192\
+        \ variant\n- For genes, drugs, diseases: manual specification recommended\n\
+        \n## DOMAIN-SPECIFIC OPTIONS:\n\n### Articles (domain=\"article\"):\n- Returns\
+        \ full article metadata, abstract, and full text when available\n- Supports\
+        \ both PubMed articles (via PMID) and Europe PMC preprints (via DOI)\n- Includes\
+        \ annotations for genes, diseases, chemicals, and variants (PubMed only)\n\
+        - detail=\"full\" attempts to retrieve full text content (PubMed only)\n\n\
+        ### Clinical Trials (domain=\"trial\"):\n- detail=None or \"protocol\": Core\
+        \ study information\n- detail=\"locations\": Study sites and contact information\n\
+        - detail=\"outcomes\": Primary/secondary outcomes and results\n- detail=\"\
+        references\": Related publications and citations\n- detail=\"all\": Complete\
+        \ trial record with all sections\n\n### Variants (domain=\"variant\"):\n-\
+        \ Returns comprehensive variant information including:\n  - Clinical significance\
+        \ and interpretations\n  - Population frequencies\n  - Gene/protein effects\n\
+        \  - External database links\n- detail parameter is ignored (always returns\
+        \ full data)\n\n### Genes (domain=\"gene\"):\n- Returns gene information from\
+        \ MyGene.info including:\n  - Gene symbol, name, and type\n  - Entrez ID and\
+        \ Ensembl IDs\n  - Gene summary and aliases\n  - RefSeq information\n- detail\
+        \ parameter is ignored (always returns full data)\n\n### Drugs (domain=\"\
+        drug\"):\n- Returns drug/chemical information from MyChem.info including:\n\
+        \  - Drug name and trade names\n  - Chemical formula and structure IDs\n \
+        \ - Clinical indications\n  - Mechanism of action\n  - External database links\
+        \ (DrugBank, PubChem, ChEMBL)\n- detail parameter is ignored (always returns\
+        \ full data)\n\n### Diseases (domain=\"disease\"):\n- Returns disease information\
+        \ from MyDisease.info including:\n  - Disease name and definition\n  - MONDO\
+        \ ontology ID\n  - Disease synonyms\n  - Cross-references to other databases\n\
+        \  - Associated phenotypes\n- detail parameter is ignored (always returns\
+        \ full data)\n\n### NCI Organizations (domain=\"nci_organization\"):\n- Returns\
+        \ organization information from NCI database including:\n  - Organization\
+        \ name and type\n  - Full address and contact information\n  - Research focus\
+        \ areas\n  - Associated clinical trials\n- Requires NCI API key\n- detail\
+        \ parameter is ignored (always returns full data)\n\n### NCI Interventions\
+        \ (domain=\"nci_intervention\"):\n- Returns intervention information from\
+        \ NCI database including:\n  - Intervention name and type\n  - Synonyms and\
+        \ alternative names\n  - Mechanism of action (for drugs)\n  - FDA approval\
+        \ status\n  - Associated clinical trials\n- Requires NCI API key\n- detail\
+        \ parameter is ignored (always returns full data)\n\n### NCI Diseases (domain=\"\
+        nci_disease\"):\n- Returns disease information from NCI controlled vocabulary\
+        \ including:\n  - Preferred disease name\n  - Disease category and classification\n\
+        \  - All known synonyms\n  - Cross-reference codes (ICD, SNOMED)\n- Requires\
+        \ NCI API key\n- detail parameter is ignored (always returns full data)\n\n\
+        ## RETURN FORMAT:\nAll fetch operations return a standardized format:\n```json\n\
+        {\n    \"id\": \"unique_identifier\",\n    \"title\": \"Record title or name\"\
+        ,\n    \"text\": \"Full content or comprehensive description\",\n    \"url\"\
+        : \"Link to original source\",\n    \"metadata\": {\n        // Domain-specific\
+        \ additional fields\n    }\n}\n```\n\n## EXAMPLES:\n\nFetch article by PMID\
+        \ (domain auto-detected):\n```\nawait fetch(id=\"35271234\")\n```\n\nFetch\
+        \ article by DOI (domain auto-detected):\n```\nawait fetch(id=\"10.1101/2024.01.20.23288905\"\
+        )\n```\n\nFetch complete trial information (domain auto-detected):\n```\n\
+        await fetch(\n    id=\"NCT04280705\",\n    detail=\"all\"\n)\n```\n\nFetch\
+        \ variant with clinical interpretations:\n```\nawait fetch(id=\"rs121913254\"\
+        )\n```\n\nExplicitly specify domain (optional):\n```\nawait fetch(\n    domain=\"\
+        variant\",\n    id=\"chr7:g.140453136A>T\"\n)\n```"
+      function: fetch
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Get detailed gene information from MyGene.info.\n\n\u26A0\uFE0F\
+        \ PREREQUISITE: Use the 'think' tool FIRST to understand your research goal!\n\
+        \nProvides real-time gene annotations including:\n- Official gene name and\
+        \ symbol\n- Gene summary/description\n- Aliases and alternative names\n- Gene\
+        \ type (protein-coding, etc.)\n- Links to external databases\n\nThis tool\
+        \ fetches CURRENT gene information from MyGene.info, ensuring\nyou always\
+        \ have the latest annotations and nomenclature.\n\nExample usage:\n- Get information\
+        \ about TP53 tumor suppressor\n- Look up BRAF kinase gene details\n- Find\
+        \ the official name for a gene by its alias\n\nNote: For genetic variants,\
+        \ use variant_searcher. For articles about genes, use article_searcher."
+      function: gene_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search for organizations in the NCI Clinical Trials database.
+
+        Searches the National Cancer Institute's curated database of organizations
+        involved in cancer clinical trials. This includes:
+        - Academic medical centers
+        - Community hospitals
+        - Industry sponsors
+        - Government facilities
+        - Research networks
+
+        Requires NCI API key from: https://clinicaltrialsapi.cancer.gov/
+
+        IMPORTANT: To avoid API errors, always use city AND state together when searching by location.
+        The NCI API has limitations on broad searches.
+
+        Example usage:
+        - Find cancer centers in Boston, MA (city AND state)
+        - Search for "MD Anderson" in Houston, TX
+        - List academic organizations in Cleveland, OH
+        - Search by organization name alone (without location)
+      function: nci_organization_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Predict variant effects on gene regulation using Google DeepMind's\
+        \ AlphaGenome.\n\n\u26A0\uFE0F PREREQUISITE: Use the 'think' tool FIRST to\
+        \ plan your analysis strategy!\n\nAlphaGenome provides state-of-the-art predictions\
+        \ for how genetic variants\naffect gene regulation, including:\n- Gene expression\
+        \ changes (RNA-seq)\n- Chromatin accessibility impacts (ATAC-seq, DNase-seq)\n\
+        - Splicing alterations\n- Promoter activity changes (CAGE)\n\nThis tool requires:\n\
+        1. AlphaGenome to be installed (see error message for instructions)\n2. An\
+        \ API key from https://deepmind.google.com/science/alphagenome\n\nAPI Key\
+        \ Options:\n- Provide directly via the api_key parameter\n- Or set ALPHAGENOME_API_KEY\
+        \ environment variable\n\nExample usage:\n- Predict regulatory effects of\
+        \ BRAF V600E mutation: chr7:140753336 A>T\n- Assess non-coding variant impact\
+        \ on gene expression\n- Evaluate promoter variants in specific tissues\n\n\
+        Note: This is an optional tool that enhances variant interpretation\nwith\
+        \ AI predictions. Standard annotations remain available via variant_getter."
+      function: alphagenome_predictor
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Fetch comprehensive details for a specific clinical trial.
+
+        Retrieves all available information for a clinical trial by its NCT ID.
+        This includes protocol details, locations, outcomes, and references.
+
+        For specific sections only, use the specialized getter tools:
+        - trial_protocol_getter: Core protocol information
+        - trial_locations_getter: Site locations and contacts
+        - trial_outcomes_getter: Primary/secondary outcomes and results
+        - trial_references_getter: Publications and references
+      function: trial_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: "Get detailed drug/chemical information from MyChem.info.\n\n\u26A0\
+        \uFE0F PREREQUISITE: Use the 'think' tool FIRST to understand your research\
+        \ goal!\n\nThis tool provides comprehensive drug information including:\n\
+        - Chemical properties (formula, InChIKey)\n- Drug identifiers (DrugBank, ChEMBL,\
+        \ PubChem)\n- Trade names and brand names\n- Clinical indications\n- Mechanism\
+        \ of action\n- Pharmacology details\n- Links to drug databases\n\nThis tool\
+        \ fetches CURRENT drug information from MyChem.info, part of the\nBioThings\
+        \ suite, ensuring you always have the latest drug data.\n\nExample usage:\n\
+        - Get information about imatinib (Gleevec)\n- Look up details for DrugBank\
+        \ ID DB00619\n- Find the mechanism of action for pembrolizumab\n\nNote: For\
+        \ clinical trials about drugs, use trial_searcher. For articles about drugs,\
+        \ use article_searcher."
+      function: drug_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Fetch core protocol information for a clinical trial.
+
+        Retrieves essential protocol details including:
+        - Official title and brief summary
+        - Study status and sponsor information
+        - Study design (type, phase, allocation, masking)
+        - Eligibility criteria
+        - Primary completion date
+      function: trial_protocol_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Antibody Registry for available antibodies.
+
+        This function searches the Antibody Registry database for antibodies matching the search term.
+        Common search parameters include gene symbols (e.g., 'TRPC6'), protein names, UniProt IDs,
+        or other relevant identifiers.
+
+        Note: Some information provided by the Antibody Registry is for non-commercial use only.
+        Users should refer to antibodyregistry.org for complete terms of use and licensing details.
+
+        Args:
+            search (str): Search term for antibodies. Can be a gene symbol, protein name, UniProt ID, or similar identifier.
+
+        Returns:
+            dict: Antibody search results including catalog numbers, vendor information, clonality,
+                  applications, and other antibody metadata, or error message if the request fails.
+      function: bc_get_antibody_list
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Ontology Lookup Service (OLS) for ChEBI terms related to a chemical name.
+
+        This function searches for ChEBI (Chemical Entities of Biological Interest) terms
+        associated with a given chemical name using the OLS API.
+
+        Args:
+            chemical_name (str): The chemical or drug name to search for (e.g., "aspirin").
+            size (int): Maximum number of results to return (default: 10).
+            exact_match (bool): Whether to perform an exact match search (default: False).
+
+        Returns:
+            dict: Dictionary containing ChEBI terms and information or error message
+      function: bc_get_chebi_terms_by_chemical
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Fetch the Open Targets GraphQL schema.
+      function: bc_get_open_targets_graphql_schema
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search for clinical trials by drug or intervention name.
+
+        This function helps biomedical researchers find clinical trials testing specific
+        drugs, therapies, or treatments, with optional filters for condition and phase.
+
+        Args:
+            intervention (str): Drug, therapy, or treatment name to search for.
+            condition (str, optional): Medical condition to filter by.
+            phase (str, optional): Clinical trial phase to filter by.
+            status (str, optional): Study status filter (default: "ALL").
+            intervention_type (str, optional): Type of intervention filter (default: "ALL").
+            page_size (int): Number of results to return (default: 50, max: 1000).
+            sort (str): Sort order for results (default: most recently updated).
+
+        Returns:
+            dict: Study search results with summary statistics or error message
+      function: bc_get_studies_by_intervention
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Ensembl database for the Ensembl ID of a given gene name.
+
+        Always provide the species parameter to ensure the correct protein is returned.
+
+        Args:
+            gene_symbol (str): The name of the gene to search for (e.g., "TP53").
+            species (str): Taxonomy ID (e.g., 10090) as string (default: "9606").
+
+        Returns:
+            dict: Gene data or error message
+      function: bc_get_ensembl_id_from_gene_symbol
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Europe PMC database for scientific articles.
+
+        Use 'recent' sort for current research queries and 'cited' sort for comprehensive career overviews
+        or well-established topics (e.g., "what has author X published on in their career").
+
+        Provide at least one of the following search parameters:
+        - query: General search query string
+        - title: Search term for article titles
+        - abstract: Search term for article abstracts.
+        - author: Author name (e.g., "last_name,first_name"). Should not contain spaces.
+        These will be combined with the specified search type ("and" or "or").
+        For a broad search, prefer the "query" parameter and "or" search type.
+        Only use the "and" search type if you want to ensure all terms must match.
+
+        Args:
+            query (str, optional): General search query string.
+            title (str, optional): Search term for article titles.
+            abstract (str, optional): Search term for article abstracts.
+            author (str, optional): Author name (e.g., "last_name,first_name"). Should not contain spaces.
+            search_type (str): Search type - "and" or "or" (default: "or").
+            sort_by (str): Sort by - "recent" for most recent, "cited" for most cited or None for no specific sorting (default: None).
+            page_size (int): Number of results to return (default: 25, max: 1000).
+
+        Returns:
+            dict: Article search results or error message
+      function: bc_get_europepmc_articles
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the UniProt database for the UniProt ID using the protein name.
+
+        Args:
+            protein_symbol (str): The name of the protein to search for (e.g., "SYNPO").
+            species (str): The organism ID (e.g., "9606" for human). Default is "9606".
+
+        Returns:
+            str: The UniProt ID of the protein.
+
+        Raises:
+            ValueError: If no results are found for the given protein name.
+      function: bc_get_uniprot_id_by_protein_symbol
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Find recruiting clinical trials in a specific geographic location.
+
+        This function helps patients and healthcare providers find clinical trials
+        that are currently recruiting participants in their area.
+
+        Args:
+            location_country (str): Country name where studies are conducted.
+            location_state (str, optional): State or province name.
+            location_city (str, optional): City name.
+            condition (str, optional): Medical condition to filter by.
+            study_type (str, optional): Type of study filter (default: "ALL").
+            age_range (str, optional): Age group filter (default: "ALL").
+            page_size (int): Number of results to return (default: 50, max: 1000).
+
+        Returns:
+            dict: Recruiting studies in the specified location or error message
+      function: bc_get_recruiting_studies_by_location
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search for publications on Google Scholar.
+
+        Supports advanced search operators including author search using 'author:"Name"' syntax.
+
+        Examples:
+        - 'machine learning' - General topic search
+        - 'author:"John Smith"' - Publications by specific author
+        - 'author:"John Smith" neural networks' - Author's work on specific topic
+
+        WARNING: Google Scholar may block requests and IP addresses for excessive queries.
+        Publication searches are particularly prone to triggering anti-bot measures.
+        This tool automatically uses free proxies to mitigate blocking, but use responsibly.
+
+        For academic research, consider using alternative databases like PubMed/EuropePMC
+        when possible to reduce load on Google Scholar.
+
+        Args:
+            query (str): Search query for publications. Use 'author:"Name"' to search by author.
+            max_results (int): Maximum number of publications to return (default: 10, max: 50).
+            use_proxy (bool): Whether to use free proxies to avoid rate limiting (default: True).
+
+        Returns:
+            dict: Publication search results or error message
+      function: bc_search_google_scholar_publications
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Execute a GraphQL query against the Open Targets API after fetching the schema.
+
+        Important: Always first fetch examples using the schema using `get_open_targets_query_examples`. If the examples are
+        not sufficient, also get the schema using the `get_open_targets_graphql_schema` tool before executing a query.
+        Relying on either of these options provides the necessary context for the query and ensures that the query is valid.
+
+        Queries should use the Ensembl gene ID (e.g., "ENSG00000141510").
+        If necessary, first use `get_ensembl_id_from_gene_symbol` to convert gene symbols (e.g., "TP53") to Ensembl IDs.
+
+        If a disease ID is needed, use the `get_efo_id_from_disease_name` tool to get the EFO ID (e.g., "EFO_0004705") for a
+        disease name (e.g., "Hypothyroidism").
+
+        Make sure to always start the query string with the keyword `query` followed by the query name.
+        The query string should be a valid GraphQL query, and the variables should be a dictionary of parameters
+        that the query requires.
+
+        Open Targets provides data on:
+        - target: annotations, tractability, mouse models, expression, disease/phenotype associations, available drugs.
+        - disease: annotations, ontology, drugs, symptoms, target associations.
+        - drug: annotations, mechanisms, indications, pharmacovigilance.
+        - variant: annotations, frequencies, effects, consequences, credible sets.
+        - studies: annotations, traits, publications, cohorts, credible sets.
+        - credibleSet: annotations, variant sets, gene assignments, colocalization.
+        - search: index of all platform entities.
+
+        Args:
+            query_string (str): The GraphQL query string.
+            variables (dict): The variables for the GraphQL query.
+
+        Returns:
+            dict: The response data from the GraphQL API.
+      function: bc_query_open_targets_graphql
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information about a specific preprint by DOI.
+
+        This tool retrieves detailed metadata for a single preprint from bioRxiv or medRxiv
+        using its DOI identifier.
+
+        Args:
+            doi (str): DOI of the preprint (e.g., '10.1101/2020.09.09.20191205').
+            server (str): Server to search - 'biorxiv' or 'medrxiv' (default: 'biorxiv').
+
+        Returns:
+            dict: Detailed preprint information or error message
+      function: bc_get_biorxiv_preprint_details
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Ontology Lookup Service (OLS) for EFO/Mondo/HP IDs related to a disease name.
+
+        This function searches for EFO IDs associated with a given disease name using the OLS API.
+        Always use this function if you need EFO IDs, e.g., for use in the Open Targets API.
+
+        Args:
+            disease_name (str): The name of the disease to search for (e.g., "SIDS").
+            size (int): Maximum number of results to return (default: 5).
+            exact_match (bool): Whether to perform an exact match search (default: False).
+
+        Returns:
+            dict: Dictionary containing EFO IDs and information or error message
+      function: bc_get_efo_id_by_disease_name
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Map a protein identifier to STRING database IDs.
+
+        This function helps resolve common gene names, synonyms, or UniProt identifiers
+        to the STRING-specific identifiers. Using STRING IDs in subsequent API calls
+        improves reliability and performance.
+
+        Args:
+            protein_symbol (str): The name of the protein to search for (e.g., "TP53").
+            species (str): The species taxonomy ID (e.g., "9606" for human). Optional.
+            return_field (str): The field to return. Either `stringId` or `preferredName` (default: stringId).
+            limit (int): Limit the number of matches returned per query (default: 1).
+
+        Returns:
+            str: The STRING ID or preferred name if found, otherwise an error message.
+      function: bc_get_string_id
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Retrieves marker genes from the PanglaoDB dataset based on specified filters.
+
+        Args:
+            species: The species ('Hs' for Human or 'Mm' for Mouse).
+            min_sensitivity: Minimum sensitivity score (0-1).
+            min_specificity: Minimum specificity score (0-1).
+            organ: Filter by organ name (case-insensitive).
+            cell_type: Filter by cell type name (case-insensitive).
+            gene_symbol: Filter by gene symbol (case-insensitive).
+
+        Returns:
+            A dictionary containing a list of matching marker gene records or an error message.
+      function: bc_get_panglaodb_marker_genes
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get KEGG ID by gene symbol.
+
+        This function converts a gene symbol (like TP53) to a KEGG gene ID (like hsa:7157) for use in the KEGG API.
+        The KEGG API typically requires KEGG IDs rather than gene symbols for most operations.
+
+        This is often the first step in a workflow - get the KEGG ID, then use it in subsequent API calls.
+
+        Common organism codes:
+        - Human: 9606 (KEGG code: hsa)
+        - Mouse: 10090 (KEGG code: mmu)
+        - Rat: 10116 (KEGG code: rno)
+        - E. coli: 562 (KEGG code: eco)
+        - Yeast: 4932 (KEGG code: sce)
+
+        Args:
+            gene_symbol (str): The gene symbol to search for (e.g., "TP53" for human, "Trp53" for mouse).
+            organism_code (str): The organism code as taxonomy ID (e.g., "9606" for human, "10090" for mouse).
+
+        Returns:
+            str | dict: The KEGG ID (e.g., "hsa:7157") or an error message.
+
+        Examples:
+            >>> get_kegg_id_by_gene_symbol(gene_symbol="TP53", organism_code="9606")
+            "hsa:7157"
+
+            >>> get_kegg_id_by_gene_symbol(gene_symbol="Trp53", organism_code="10090")
+            "mmu:22059"
+      function: bc_get_kegg_id_by_gene_symbol
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Reactome API identifier endpoint.
+
+        Use this endpoint to retrieve pathways associated with a given identifier.
+        Always provide the species parameter to ensure the correct protein is returned.
+
+        Args:
+            identifier (str): The identifier of the element to be retrieved
+            base_url (str): Base URL for the Reactome API
+            interactors (bool): Include interactors
+            species (str or list): List of species to filter the result (accepts taxonomy ids, species names and dbId)
+            page_size (int): Pathways per page
+            page (int): Page number
+            sort_by (str): Field to sort results by (e.g., "ENTITIES_PVALUE", "ENTITIES_FDR")
+            order (str): Sort order ("ASC" or "DESC")
+            resource (str): Resource to filter by (TOTAL includes all molecule types)
+            p_value (float): P-value threshold (only pathways with p-value <= threshold will be returned)
+            include_disease (bool): Set to False to exclude disease pathways
+            min_entities (int): Minimum number of contained entities per pathway
+            max_entities (int): Maximum number of contained entities per pathway
+            importable_only (bool): Filter to only include importable resources
+            timeout (int): Request timeout in seconds
+
+        Returns:
+            dict: API response data or error information
+      function: bc_get_reactome_info_by_identifier
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information for a specific antibody by its ID.
+
+        This function retrieves comprehensive information about a single antibody from the Antibody Registry
+        using its unique antibody ID (abId). The antibody ID is typically obtained from the results of
+        get_antibody_list() function, where each antibody entry contains an 'abId' field that can be used
+        with this function to get detailed information.
+
+        Note: Some information provided by the Antibody Registry is for non-commercial use only.
+        Users should refer to antibodyregistry.org for complete terms of use and licensing details.
+
+        Args:
+            ab_id (str): The unique antibody ID from the Antibody Registry. This is typically obtained
+                        from the 'abId' field in the results of get_antibody_list(), unless the ID
+                        is directly provided by the user.
+
+        Returns:
+            dict: Detailed antibody information including catalog number, vendor, clonality, epitope,
+                  applications, target species, isotype, source organism, citations, and other metadata,
+                  or error message if the request fails.
+      function: bc_get_antibody_information
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search the FDA Drugs@FDA database for approved drug products.
+
+        This function searches for FDA-approved drugs based on various criteria including
+        brand names, generic names, active ingredients, sponsors, and regulatory information.
+
+        Args:
+            brand_name (str, optional): Brand or trade name of the drug.
+            generic_name (str, optional): Generic name of the drug.
+            active_ingredient (str, optional): Active ingredient name.
+            sponsor_name (str, optional): Company or sponsor name.
+            application_number (str, optional): FDA application number (NDA, ANDA, or BLA).
+            marketing_status (str, optional): Marketing status of the drug.
+            dosage_form (str, optional): Dosage form of the drug.
+            route (str, optional): Route of administration.
+            search_type (str): How to combine search terms - "and" or "or".
+            sort_by (str, optional): Field to sort results by.
+            limit (int): Maximum number of results to return (1-1000).
+            skip (int): Number of results to skip for pagination (0-25000).
+
+        Returns:
+            dict: Search results from the FDA Drugs@FDA API.
+      function: bc_search_drugs_fda
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search PRIDE Archive projects by various criteria.
+
+        This function searches the PRIDE database for mass spectrometry proteomics
+        projects using keywords and filters. Useful for finding relevant datasets
+        for comparative analysis or method validation.
+
+        Args:
+            keyword (str, optional): Search keywords for project titles/descriptions.
+            organism_filter (str, optional): Filter by organism name.
+            instrument_filter (str, optional): Filter by mass spectrometer instrument.
+            experiment_type_filter (str, optional): Filter by experimental approach.
+            page_size (int, optional): Number of results (max 100). Defaults to 20.
+            sort_field (str, optional): Sort field. Defaults to "submissionDate".
+            sort_direction (str, optional): Sort direction. Defaults to "DESC".
+
+        Returns:
+            dict: Search results with matching PRIDE projects and metadata
+      function: bc_search_pride_projects
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search for drugs by their therapeutic or pharmacologic class.
+
+        IMPORTANT: Use get_available_pharmacologic_classes() first to see the exact
+        class terms available in the FDA database. This function requires exact matches
+        of the pharmacologic class terms as they appear in the FDA data.
+
+        Args:
+            therapeutic_class (str): The exact therapeutic class term from FDA database.
+            class_type (str): Type of classification - epc, moa, pe, or cs.
+            limit (int): Maximum number of results to return.
+
+        Returns:
+            dict: Search results for drugs in the specified therapeutic class.
+      function: bc_search_drugs_by_therapeutic_class
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search proteins identified in a specific PRIDE project.
+
+        This function searches for proteins identified in a specific PRIDE mass
+        spectrometry project. Useful for finding specific proteins of interest
+        in proteomics datasets.
+
+        Args:
+            project_accession (str): The PRIDE project accession to search in.
+            keyword (str, optional): Search keyword for protein names or accessions.
+            page_size (int, optional): Number of results (max 100). Defaults to 20.
+            sort_field (str, optional): Sort field. Defaults to "accession".
+            sort_direction (str, optional): Sort direction. Defaults to "ASC".
+
+        Returns:
+            dict: Search results with proteins found in the specified project
+      function: bc_search_pride_proteins
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Query the Human Protein Atlas API for target general information,
+        genetic constraint, and tractability.
+      function: bc_get_human_protein_atlas_info
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the UniProt database for protein information.
+
+        Provide either protein_id or protein_name to search for a specific protein.
+        Always provide the species parameter to ensure the correct protein is returned.
+
+        Args:
+            protein_id (str, optional): The protein identifier or accession number (e.g., "P04637"). Only provide if protein_name is None.
+            protein_name (str, optional): The name of the protein to search for (e.g., "P53").
+            gene_symbol (str, optional): The gene name to search for (e.g., "TP53").
+            species (str, optional): Taxonomy ID (e.g., 10090) as string.
+            include_references (bool, optional): Whether to include references and cross-references in the response. Defaults to False.
+
+        Returns:
+            dict: Protein data or error message
+      function: bc_get_uniprot_protein_info
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get a network image for a given protein from the STRING database.
+
+        Always provide the species parameter to ensure the correct protein is returned.
+
+        Args:
+            protein_symbol (str): The name of the protein to search for (e.g., "TP53").
+            species (str): The species taxonomy ID (e.g., "10090" for mouse).
+            flavor (str): The network flavor to use (default: "confidence").
+            min_score (int): Minimum combined score threshold (default: 700).
+
+        Returns:
+            Image: The network image for the protein.
+      function: bc_get_string_network_image
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information about a specific InterPro entry.
+
+        InterPro entries represent protein families, domains, and functional sites.
+        Each entry integrates information from multiple member databases.
+
+        Args:
+            interpro_id (str): The InterPro entry identifier (e.g., "IPR000001").
+            include_interactions (bool, optional): Whether to include protein-protein interactions data. Defaults to False.
+            include_pathways (bool, optional): Whether to include pathway information. Defaults to False.
+            include_cross_references (bool, optional): Whether to include cross-references to other databases. Defaults to False.
+
+        Returns:
+            dict: InterPro entry data including description, type, member databases, and optional additional data
+      function: bc_get_interpro_entry
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information about a specific clinical trial by its NCT ID.
+
+        This function retrieves comprehensive data about a single clinical trial, including
+        study design, eligibility criteria, outcomes, locations, and contact information.
+
+        Args:
+            nct_id (str): NCT ID of the clinical trial (e.g., "NCT01234567").
+            fields (str): Comma-separated list of fields to return, or "all" for complete data.
+                         Default includes key modules for biomedical researchers.
+
+        Returns:
+            dict: Detailed study information or error message
+      function: bc_get_study_details
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get drug labeling information including active ingredients, dosage, and usage instructions.
+
+        This function retrieves comprehensive drug label information from the FDA's drug labeling
+        database, which includes detailed product information, active ingredients, dosage forms,
+        and administration routes.
+
+        Args:
+            brand_name (str, optional): Brand name of the drug.
+            generic_name (str, optional): Generic name of the drug.
+            ndc (str, optional): National Drug Code number.
+
+        Returns:
+            dict: Drug labeling information from the FDA API.
+      function: bc_get_drug_label_info
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Find generic equivalents for a brand name drug.
+
+        This function searches for ANDA (Abbreviated New Drug Application) entries
+        that are generic equivalents of a specified brand name drug.
+
+        Args:
+            brand_name (str): The brand name drug to find generics for.
+
+        Returns:
+            dict: Generic drug equivalents and their manufacturers.
+      function: bc_get_generic_equivalents
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Ontology Lookup Service (OLS) for Gene Ontology (GO) terms related to a gene name.
+
+        This function searches for GO terms associated with a given gene name using the OLS API.
+        Gene Ontology provides structured vocabularies for gene and gene product attributes.
+
+        Args:
+            gene_name (str): The gene name or symbol to search for (e.g., "TP53").
+            size (int): Maximum number of results to return (default: 10).
+            exact_match (bool): Whether to perform an exact match search (default: False).
+
+        Returns:
+            dict: Dictionary containing GO terms and information or error message
+      function: bc_get_go_terms_by_gene
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Retrieves the available options for filtering marker genes in the PanglaoDB dataset.
+
+        Returns:
+            A dictionary containing lists of unique values for species, organ, cell type, and gene symbols.
+      function: bc_get_panglaodb_options
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the AlphaFold database for the protein structure information using the protein name.
+
+        This function constructs a query URL to fetch data from the AlphaFold database based on the provided protein name.
+        The response contains links to the PDB and CIF files for the protein structure, as well as general information about
+        the protein.
+
+        Args:
+            protein_symbol (Annotated[str, Field, optional): The name of the protein to search for (e.g., "SYNPO").
+            species (str): The organism ID (e.g., "9606" for human). Default is "9606".
+
+        Returns:
+            dict: Protein structure information or an error message.
+      function: bc_get_alphafold_info_by_protein_symbol
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search for clinical trials by medical condition with simplified parameters.
+
+        This function provides a focused search for clinical trials related to a specific
+        medical condition, with common filters that biomedical researchers typically use.
+
+        Args:
+            condition (str): Medical condition or disease name to search for.
+            status (str, optional): Study status filter (default: "ALL").
+            study_type (str, optional): Type of study filter (default: "ALL").
+            location_country (str, optional): Country where studies are conducted.
+            page_size (int): Number of results to return (default: 50, max: 1000).
+            sort (str): Sort order for results (default: most recently updated).
+
+        Returns:
+            dict: Study search results with summary statistics or error message
+      function: bc_get_studies_by_condition
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get similarity scores between proteins from the STRING database.
+
+        The scores represent protein homology based on Smith-Waterman bit scores.
+        Only scores above 50 are reported, and only half of the similarity matrix
+        (since it's symmetric) plus self-hits are returned.
+
+        Args:
+            protein_symbol (str): The protein symbol of the first protein (e.g., "TP53").
+            protein_symbol_comparison (str): The protein symbol of the second protein (e.g., "MKI67").
+            species (str): The species taxonomy ID (e.g., "9606" for human). Optional.
+
+        Returns:
+            list: A list of dictionaries containing protein pairs and their bit scores.
+      function: bc_get_string_similarity_scores
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get example GraphQL queries for the Open Targets API.
+
+        Returns a dictionary of named example queries that can be used with the
+        query_open_targets_graphql tool. These examples demonstrate common use cases
+        for retrieving data about targets, diseases, drugs, and their associations.
+      function: bc_get_open_targets_query_examples
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get the full text XML for a given PMC ID from Europe PMC.
+
+        Args:
+            pmc_id (str): PMC ID starting with "PMC" (e.g., "PMC11629965").
+
+        Returns:
+            dict: Full text XML content or error message
+      function: bc_get_europepmc_fulltext
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information about a specific PRIDE project.
+
+        PRIDE (PRoteomics IDEntifications) is a public repository for mass spectrometry
+        proteomics data. This function retrieves comprehensive information about a
+        specific project including metadata, experimental details, and optionally
+        associated files and similar projects.
+
+        Args:
+            project_accession (str): The PRIDE project accession (e.g., "PRD000001").
+            include_files (bool, optional): Whether to include file information. Defaults to False.
+            include_similar_projects (bool, optional): Whether to include similar projects. Defaults to False.
+
+        Returns:
+            dict: Project information including metadata, experimental details, and optional file/similar project data
+      function: bc_get_pride_project
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get all protein-protein interactions for a given protein with a combined score above the threshold.
+
+        Always provide the species parameter to ensure the correct protein is returned.
+
+        Args:
+            protein_symbol (str): The name of the protein to search for (e.g., "TP53").
+            species (str): The species taxonomy ID (e.g., "10090" for mouse).
+            min_score (int): Minimum combined score threshold (default: 700).
+
+        Returns:
+            list: A list of dictionaries containing interacting proteins and their scores.
+      function: bc_get_string_interactions
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Ontology Lookup Service (OLS) for Cell Ontology (CL) terms.
+
+        This function searches for Cell Ontology terms associated with cell types
+        using the OLS API. The Cell Ontology provides a controlled vocabulary for cell types.
+
+        Args:
+            cell_type (str): The cell type to search for (e.g., "T cell").
+            size (int): Maximum number of results to return (default: 10).
+            exact_match (bool): Whether to perform an exact match search (default: False).
+
+        Returns:
+            dict: Dictionary containing Cell Ontology terms and information or error message
+      function: bc_get_cell_ontology_terms
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Ontology Lookup Service (OLS) for all available ontologies.
+
+        This function retrieves a list of all ontologies available in OLS, including
+        their names, descriptions, and metadata. Use this function first to discover
+        which ontologies are available before using other search functions.
+
+        Returns:
+            dict: Dictionary containing available ontologies and their information or error message
+      function: bc_get_available_ontologies
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Ontology Lookup Service (OLS) for detailed information about a specific term.
+
+        This function retrieves comprehensive information about a specific ontology term,
+        including its definition, synonyms, hierarchical relationships, and cross-references.
+
+        Args:
+            term_id (str): The term ID in CURIE format (e.g., "EFO:0000001").
+            ontology_id (str): The ontology ID (e.g., "efo").
+
+        Returns:
+            dict: Dictionary containing detailed term information or error message
+      function: bc_get_term_details
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get domain architecture and InterPro matches for a specific protein.
+
+        This function retrieves all InterPro domain matches for a given protein,
+        providing insight into the protein's functional domains and architecture.
+
+        To get the protein's UniProt ID, use the `get_uniprot_id_by_protein_symbol` tool first.
+
+        Args:
+            protein_id (str): The protein identifier or accession (e.g., "P04637" or "CYC_HUMAN").
+            source_db (str, optional): The protein database source. Defaults to "uniprot".
+            include_structure_info (bool, optional): Whether to include structural information. Defaults to False.
+            species_filter (str, optional): Taxonomy ID to filter results (e.g., "9606" for human). Defaults to None.
+
+        Returns:
+            dict: Protein domain information including InterPro matches, domain architecture, and optional structural data
+      function: bc_get_protein_domains
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get detailed information about a specific FDA-approved drug by its application number.
+
+        Application numbers follow the format: NDA, ANDA, or BLA followed by 6 digits.
+        - NDA: New Drug Application (brand name drugs)
+        - ANDA: Abbreviated New Drug Application (generic drugs)
+        - BLA: Biologics License Application (biological products)
+
+        Args:
+            application_number (str): The FDA application number.
+
+        Returns:
+            dict: Detailed drug information from the FDA Drugs@FDA API.
+      function: bc_get_drug_by_application_number
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search for grants from grants.gov using the Search2 API.
+
+        Args:
+            keyword: Keyword to search for
+            opp_num: Opportunity number
+            eligibilities: Eligibility criteria (comma-separated)
+            agencies: Agency codes (comma-separated)
+            rows: Number of results to return
+            opp_statuses: Opportunity statuses (pipe-separated, e.g. 'forecasted|posted')
+            aln: Assistance Listing Number
+            funding_categories: Funding categories (comma-separated)
+
+        Returns:
+            dict: Search results from grants.gov or error message
+      function: bc_search_grants_gov
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get available pharmacologic classes from the FDA database.
+
+        This function retrieves the actual pharmacologic class values available in the
+        FDA database, which can then be used with search_drugs_by_therapeutic_class.
+        Always call this function first to see available options before searching.
+
+        Args:
+            class_type (str): Type of classification - epc, moa, pe, or cs.
+            limit (int): Maximum number of unique classes to return.
+
+        Returns:
+            dict: Available pharmacologic class values in the FDA database.
+      function: bc_get_available_pharmacologic_classes
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Ontology Lookup Service (OLS) for hierarchical children of a term.
+
+        This function retrieves the hierarchical children of a specific ontology term,
+        including subclasses and terms related via hierarchical properties like 'part of'.
+
+        Args:
+            term_id (str): The term ID in CURIE format (e.g., "EFO:0000001").
+            ontology_id (str): The ontology ID (e.g., "efo").
+            size (int): Maximum number of children to return (default: 20).
+
+        Returns:
+            dict: Dictionary containing hierarchical children or error message
+      function: bc_get_term_hierarchical_children
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get recent preprints from bioRxiv or medRxiv.
+
+        This tool searches the bioRxiv and medRxiv preprint servers for research papers.
+        You can search by date range, recent posts, or most recent papers.
+        Results are paginated with up to 100 papers per API call.
+
+        Args:
+            server (str): Server to search - 'biorxiv' or 'medrxiv' (default: 'biorxiv').
+            start_date (str, optional): Start date in YYYY-MM-DD format.
+            end_date (str, optional): End date in YYYY-MM-DD format.
+            days (int, optional): Number of recent days to search (1-365).
+            recent_count (int, optional): Number of most recent preprints (1-1000).
+            category (str, optional): Subject category filter (e.g., 'cell biology', 'neuroscience').
+            cursor (int): Starting position for pagination (default: 0).
+            max_results (int): Maximum number of results to return (default: 100, max: 500).
+
+        Returns:
+            dict: Preprint search results or error message
+      function: bc_get_recent_biorxiv_preprints
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search for clinical trials studies based on various criteria.
+
+        This function allows biomedical researchers to find relevant clinical trials by searching
+        across conditions, interventions, sponsors, and other study characteristics.
+
+        Args:
+            condition (str, optional): Medical condition or disease to search for.
+            intervention (str, optional): Drug, therapy, or treatment name to search for.
+            sponsor (str, optional): Study sponsor organization.
+            status (str, optional): Current status of the study.
+            phase (str, optional): Clinical trial phase.
+            study_type (str, optional): Type of study (interventional, observational, etc.).
+            location_country (str, optional): Country where study is conducted.
+            min_age (int, optional): Minimum age of participants in years.
+            max_age (int, optional): Maximum age of participants in years.
+            sex (str, optional): Sex of participants.
+            page_size (int): Number of results to return (default: 25, max: 1000).
+            sort (str): Sort order for results (default: most recently updated).
+
+        Returns:
+            dict: Study search results or error message
+      function: bc_search_studies
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Count unique values in a specific field across FDA-approved drugs.
+
+        This function is useful for statistical analysis and getting overviews of the drug database.
+        Common fields to count include:
+        - sponsor_name: Count drugs by pharmaceutical company
+        - products.dosage_form: Count by dosage forms (tablet, injection, etc.)
+        - products.route: Count by administration routes (oral, injection, etc.)
+        - products.marketing_status: Count by marketing status
+        - openfda.pharm_class_epc: Count by pharmacologic class
+
+        Args:
+            field (str): The field to count unique values for.
+            search_filter (str, optional): Search filter to apply before counting.
+            limit (int): Maximum number of count results to return.
+
+        Returns:
+            dict: Count results showing terms and their frequencies.
+      function: bc_count_drugs_by_field
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Execute a KEGG API query.
+
+        This function provides access to the KEGG API, allowing you to query biological data across
+        pathways, genes, compounds, diseases, and more. The function can perform all KEGG API operations
+        and accepts various parameters depending on the operation.
+
+        When searching for genes in KEGG, you typically need KEGG IDs rather than gene symbols.
+        Use the get_kegg_id_by_gene_symbol function first to convert gene symbols to KEGG IDs.
+
+        Common operations:
+        - info: Get database metadata (e.g., operation=info, database=PATHWAY)
+        - list: List entries in a database (e.g., operation=list, database=PATHWAY, query="hsa")
+        - get: Retrieve specific entries (e.g., operation=get, entries=["hsa:7157"])
+        - find: Search for entries by keyword (e.g., operation=find, database=COMPOUND, query="glucose")
+        - link: Find related entries (e.g., operation=link, target_db=PATHWAY, entries=["hsa:7157"])
+        - conv: Convert between identifiers (e.g., operation=conv, target_db=NCBI_GENEID, entries=["hsa:7157"])
+
+        Args:
+            operation (KeggOperation): The KEGG operation to perform.
+            database (KeggDatabase | KeggOutsideDb | str, optional): The database to query.
+            target_db (KeggDatabase | KeggOutsideDb | str, optional): The target database for conversion.
+            source_db (KeggDatabase | KeggOutsideDb | str, optional): The source database for conversion.
+            query (str, optional): The query string for FIND or LIST operations.
+            option (KeggOption | KeggFindOption | KeggRdfFormat, optional): Additional options for the operation.
+            entries (List[str], optional): List of entries for GET or LINK operations.
+
+        Returns:
+            str | dict: The result of the KEGG query or an error message.
+
+        Examples:
+            # List human pathways
+            >>> query_kegg(operation=KeggOperation.LIST, database=KeggDatabase.PATHWAY, query="hsa")
+
+            # Get data for the glycolysis pathway
+            >>> query_kegg(operation=KeggOperation.GET, entries=["hsa00010"])
+
+            # Get data for the TP53 gene
+            >>> query_kegg(operation=KeggOperation.GET, entries=["hsa:7157"])
+
+            # Get amino acid sequence for TP53
+            >>> query_kegg(operation=KeggOperation.GET, entries=["hsa:7157"], option=KeggOption.AASEQ)
+
+            # Find compounds with formula C7H10O5
+            >>> query_kegg(operation=KeggOperation.FIND, database=KeggDatabase.COMPOUND, query="C7H10O5", option="formula")
+
+            # Find pathways related to TP53
+            >>> query_kegg(operation=KeggOperation.LINK, target_db=KeggDatabase.PATHWAY, entries=["hsa:7157"])
+
+            # Convert KEGG ID to NCBI Gene ID
+            >>> query_kegg(operation=KeggOperation.CONV, target_db="ncbi-geneid", source_db="hsa:7157")
+
+            # Get information about a specific pathway
+            >>> query_kegg(operation=KeggOperation.GET, entries=["hsa00010"])
+
+            # Get the compound ID for caffeine
+            >>> query_kegg(operation=KeggOperation.FIND, database=KeggDatabase.COMPOUND, query="caffeine")
+
+            # Get the drug ID for acetaminophen
+            >>> query_kegg(operation=KeggOperation.FIND, database=KeggDatabase.DRUG, query="acetaminophen")
+
+            # Check if two drugs interact (ibuprofen and aspirin)
+            >>> query_kegg(operation=KeggOperation.DDI, entries=["dr:D00126", "dr:D00109"])
+      function: bc_query_kegg
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Query the Ontology Lookup Service (OLS) for terms across multiple ontologies.
+
+        This function provides a general search across ontologies in OLS, allowing you to
+        find terms from multiple ontologies or search all ontologies at once.
+
+        TIP: Use get_available_ontologies() first to discover which ontologies are available
+        and their IDs before searching.
+
+        Args:
+            search_term (str): The term to search for.
+            ontologies (str): Comma-separated ontology IDs (e.g., "efo,go,chebi"). Empty for all.
+                             Use get_available_ontologies() to see available options.
+            size (int): Maximum number of results to return (default: 20).
+            exact_match (bool): Whether to perform an exact match search (default: False).
+
+        Returns:
+            dict: Dictionary containing terms from various ontologies or error message
+      function: bc_search_ontology_terms
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Search InterPro entries by various criteria.
+
+        This function allows searching the InterPro database using different filters
+        such as entry type, source database, GO terms, and species.
+
+        Args:
+            query (str, optional): Search term for InterPro entry names or descriptions.
+            entry_type (str, optional): Filter by entry type (family, domain, etc.).
+            source_database (str, optional): Filter by member database (pfam, prosite, etc.).
+            go_term (str, optional): Filter by GO term (e.g., "GO:0006122").
+            species_filter (str, optional): Filter by taxonomy ID (e.g., "9606" for human).
+            page_size (int, optional): Number of results to return (max 200). Defaults to 20.
+
+        Returns:
+            dict: Search results with InterPro entries matching the criteria
+      function: bc_search_interpro_entries
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: |-
+        Get general statistics about the FDA Drugs@FDA database.
+
+        This function provides an overview of the database including:
+        - Top pharmaceutical sponsors by number of approved drugs
+        - Most common dosage forms
+        - Most common routes of administration
+        - Distribution of marketing statuses
+
+        Returns:
+            dict: Statistical overview of the FDA drugs database.
+      function: bc_get_drug_statistics
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Write markdown content to a file in the results directory
+      function: write_md_result
+      package: longevity_forest.core.experts

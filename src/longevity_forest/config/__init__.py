@@ -1,0 +1,32 @@
+"""Configuration modules for agents, LLMs, and MCPs."""
+
+from longevity_forest.config.llm import (
+    ANTHROPIC_CLAUDE_4_5_HAIKU,
+    ANTHROPIC_CLAUDE_4_5_SONNET,
+)
+from longevity_forest.config.prompts import (
+    QUERY_AGENT_PROMPT,
+    GOOGLE_AGENT_PROMPT,
+    LITERATURE_AGENT_PROMPT,
+    STRUCTURE_AGENT_PROMPT,
+    DATABASE_AGENT_PROMPT,
+    BASE_SCIENTIST_PROMPT,
+    get_gene_analysis_prompt,
+    KEY_PDB_ANALYSIS_PROMPT,
+    SEQUENCE2FUNCTION_REPORT_PROMPT,
+)
+
+__all__ = [
+    "ANTHROPIC_CLAUDE_4_5_HAIKU",
+    "ANTHROPIC_CLAUDE_4_5_SONNET",
+    "QUERY_AGENT_PROMPT",
+    "GOOGLE_AGENT_PROMPT",
+    "LITERATURE_AGENT_PROMPT",
+    "STRUCTURE_AGENT_PROMPT",
+    "DATABASE_AGENT_PROMPT",
+    "BASE_SCIENTIST_PROMPT",
+    "get_gene_analysis_prompt",
+    "KEY_PDB_ANALYSIS_PROMPT",
+    "SEQUENCE2FUNCTION_REPORT_PROMPT",
+]
+

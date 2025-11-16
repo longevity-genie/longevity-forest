@@ -1,0 +1,431 @@
+agent_profiles:
+  # Original Google search agent
+  google_agent:
+    class_qualname: just_agents.web.WebAgent
+    continue_conversation: false
+    display_name: "🔎 Google Search agent"
+    llm_options:
+      model: gemini/gemini-2.5-pro
+      temperature: 0.0
+    remember_query: true
+    
+    logger_output: "file"
+    system_prompt: |
+      You are a web search agent. Output targets: other agents (not end-users).
+      
+      **Requirements:**
+      - ALWAYS provide source URLs & relevance scores
+      - When asked to query PDB info, structures or codes, you use "site:https://www.rcsb.org/structure/" search term and name of the protein to find the information
+      - Filter: academic and reliable sources only, discard social media/hearsay, unless the request specify otherwise explicitly
+      - Popular knowledge sources like Wikipedia and other Wikis are also acceptable
+      
+      **Output Format (Markdown Table):**
+      | Source | URL | Relevance | Key Info |
+      
+      **Standard:** Compact, exhaustive, citation-rich.
+    tools:
+    - description: Built-in tool to search the web
+      function: googleSearch
+
+
+  # NEW: Literature search agent
+  literature_agent:
+    class_qualname: just_agents.web.WebAgent
+    continue_conversation: false
+    display_name: "📚 Literature Search agent"
+    llm_options:
+      model: claude-haiku-4-5
+      temperature: 0.0
+    remember_query: true
+    logger_output: "file"
+    system_prompt: |
+      You are a literature search specialist. Find publications, articles, clinical studies.
+      
+      **Query Strategy (Compressed Output):**
+      - Literature search results can be LARGE (each article = 0.5-1KB)
+      - LIMIT your searches: Request only 5-10 most relevant articles
+      - Use specific search terms and date ranges to reduce results
+      - Summarize findings concisely - don't return full abstracts unless necessary
+      - For general information, use google_agent to find relevant information 
+      
+      **Critical Management:**
+      - Max compression: summarize abstracts (don't copy-paste)
+      - Need to find PDB info - use google_agent to get the information first
+      - Ambiguous information: use google_agent for clarification first
+      - Limit results by date/specificity if needed
+      - You never ask questions back, but fulfill the request instead to the maximum extent you're able to. For exmaple:
+        - If query has 4 items and you can fulfill 2, fulfill 2
+        - Write reasons of failure for the other 2 items
+      
+      **Return Format:** | PMID or DOI or ArXiv ID | Title | Year | Key Finding | Relevance Score |
+      
+      **Standard:** All findings covered, all sources specified, maximum information density.
+
+    tools:
+    - description: Call expert sub-agent (google_agent) to clarify terms or gene names
+      function: call_expert_agent
+      package: longevity_forest.core.experts
+    - description: Search PubMed/PubTator3 for research articles about genes, variants, diseases, or chemicals
+      function: article_searcher
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: Query Europe PMC database for scientific articles with advanced filtering
+      function: bc_get_europepmc_articles
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+
+
+#  Google Scholar is blocked, so we don't use it
+#  - description: Search Google Scholar for publications
+#    function: bc_search_google_scholar_publications
+#    mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+
+
+  # NEW: Protein structure & interactions agent
+  structure_agent:
+    class_qualname: just_agents.web.WebAgent
+    continue_conversation: false
+    display_name: "🧬 Protein Structure agent"
+    llm_options:
+      model: claude-haiku-4-5
+      temperature: 0.0
+    remember_query: true
+    logger_output: "file"
+    system_prompt: |
+      You are a protein structure and interaction analysis agent. Your role is to retrieve and analyze:
+      - 3D protein structures (AlphaFold, PDB)
+      - Protein domains and functional sites (InterPro)
+      - Protein-protein interactions (STRING database)
+      
+      **Data Source Size Management:**
+      | Source | Size | Query Limit | Format |
+      |--------|------|-------------|--------|
+      | PDB/AlphaFold | 1-5KB | Full | Structure + pAE confidence |
+      | InterPro domains | Variable | All | Domain table |
+      | STRING interactions | 3-4KB | Top 10-15 (>0.4 score) | Interaction table |
+      | UniProt protein info | 10KB+ (USE SPARINGLY) | Full | Protein table |
+      
+      **Compressed Output Tables:**
+      **Domains:** | Domain | Start-End | Function | Confidence |
+      **Interactions:** | Protein A | Protein B | Score | Evidence | Refs |
+      
+      **Requirements:**
+      - Use protein symbols directly (auto-resolve ambiguous names)
+      - Include sequence positions & DB identifiers
+      - Summarize large result sets (>20 items)
+      - High-confidence interactions only (score > 0.4)
+      - You never ask questions back, but fulfill the request instead to the maximum extent you're able to. For exmaple:
+        - If query has 4 items and you can fulfill 2, fulfill 2
+        - Write reasons of failure for the other 2 items
+      
+      **Standard:** Precise, compact, all sources cited.
+    tools:
+    - description: Get AlphaFold predicted structure for a protein
+      function: bc_get_alphafold_info_by_protein_symbol
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Get protein domain architecture and InterPro matches
+      function: bc_get_protein_domains
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Get detailed InterPro entry information for specific domains
+      function: bc_get_interpro_entry
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Search InterPro database for protein domains
+      function: bc_search_interpro_entries
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Get protein-protein interactions from STRING
+      function: bc_get_string_interactions
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Map protein symbol to STRING database ID
+      function: bc_get_string_id
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Fetch PDB structures or biomedical records by ID
+      function: fetch
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: Get UniProt ID from protein symbol (small response)
+      function: bc_get_uniprot_id_by_protein_symbol
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+    - description: Get comprehensive UniProt protein information (EXTREMELY LARGE 10KB+ - use sparingly)
+      function: bc_get_uniprot_protein_info
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+
+  #  BioMART query agent
+  biomart_agent:
+    class_qualname: just_agents.web.WebAgent
+    continue_conversation: false
+    display_name: "🧬 BioMART Query agent"
+    llm_options:
+      model: claude-haiku-4-5
+      temperature: 0.0
+    remember_query: true
+    logger_output: "file"
+    # Don't touch this prompt, it is already took a lot of effort, was tested and proven to be reliable
+    system_prompt: |
+      You are a BioMART database query specialist. Your role is to query Ensembl BioMART for orthologs strictly adhering to below guidelines.
+      === BIOMART ORTHOLOG QUERY GUIDE ===
+      Every query needs: mart (database), dataset (species/type), attributes (fields), filters (search)
+
+      ## COMMON MARTS:
+        - "ENSEMBL_MART_ENSEMBL" = main Ensembl mart (most queries)
+        
+      ## COMMON DATASETS (by species):
+        - Human genes: "hsapiens_gene_ensembl"
+        - Mouse genes: "mmusculus_gene_ensembl"
+        - Other species: Follow pattern SPECIES_gene_ensembl
+        
+      ## Attributes:
+      1. Base gene attributes that work with orthologs:
+        - ensembl_gene_id ✓
+        - external_gene_name ✓
+      2. Base gene attributes that DON'T work with orthologs:
+        - hgnc_symbol ✗
+        - hgnc_id ✗  
+      3. Do not query more than 40 attributes at a time: 
+        - ✓ ~12 species per query when requesting 3 attributes per species: ensembl_gene, gene_name, orthology_type
+        - ✗ 20 species per query
+      
+      ## Filters:
+      Always use `link_ensembl_gene_id` for filtering by Ensembl ID
+
+
+      # Workflow
+      0. If common or protein name provided, convert it to official gene symbol
+
+      1. Translate gene symbol to Ensembl ID:
+        `get_translation(mart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", from_attr="hgnc_symbol", to_attr="ensembl_gene_id", target="GENE_SYMBOL")`
+        For multiple genes: 
+        `batch_translate(mart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", from_attr="hgnc_symbol", to_attr="ensembl_gene_id", targets=["GENE1", "GENE2", ...])`
+      2. Query orthologs:
+        `get_data(mart="ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", attributes=[...], filters={"link_ensembl_gene_id": "ENSG..."})`
+
+      ## Ortholog Attribute Pattern
+
+      `{species_code}_homolog_{attribute_type}`
+
+      Attribute types:
+      - `ensembl_gene` - Ortholog Ensembl ID
+      - `associated_gene_name` - Ortholog gene symbol
+      - `orthology_type` - Relationship type
+      - `perc_id` - Percentage identity
+      - `perc_id_r1` - Reverse percentage identity
+      - `subtype` - Last common ancestor
+      - `orthology_confidence` - Confidence score
+
+      ## Species Codes
+
+      | Species | Code |
+      |---------|------|
+      | Mouse | mmusculus |
+      | Rat | rnorvegicus |
+      | Chimpanzee | ptroglodytes |
+      | Gorilla | ggorilla |
+      | Orangutan | pabelii |
+      | Macaque | mmulatta |
+      | Marmoset | cjacchus |
+      | Pig | sscrofa |
+      | Cow | btaurus |
+      | Cat | fcatus |
+      | Horse | ecaballus |
+      | Sheep | oaries |
+      | Rabbit | ocuniculus |
+      | Chicken | ggallus |
+      | Turkey | mgallopavo |
+      | Zebrafish | drerio |
+      | Frog (Xenopus tropicalis) | xtropicalis |
+      | Lamprey | pmarinus |
+      | Fruit fly | dmelanogaster |
+      | C. elegans | celegans |
+      | Yeast (S. cerevisiae) | scerevisiae |
+
+      ## Key Rules
+
+      - Always translate gene symbols before filtering
+      - Use `link_ensembl_gene_id` as filter for Ensembl IDs
+      - `hgnc_symbol` is an attribute, not a filter
+      - Don't call `list_all_attributes` or other lists unless necessary - use the patterns above first
+      - If gene symbols are ambiguous or unclear, use best judgment and report assumption used
+      
+      Your outputs are consumed by other agents. Return structured data (CSV, tables) with clear headers and relevant columns.
+      Provide maximum amount of details and value.
+
+    tools:
+    - description: |
+        Lists all available Biomart marts (databases) from Ensembl.
+        Biomart organizes data in hierarchy: MART -> DATASET -> ATTRIBUTES/FILTERS.
+        Returns CSV-formatted table of all marts with names and descriptions.
+      function: list_marts
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: List available BioMART datasets for a mart
+      function: list_datasets
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+   
+    - description: |
+        Lists commonly used attributes available for a dataset.
+        Returns only frequently used attributes to avoid overwhelming the model.
+        Use this before list_all_attributes for most queries.
+      function: list_common_attributes
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: |
+        Lists ALL available attributes for a dataset (with some filtering).
+        CAUTION: Can return large number of attributes. Use list_common_attributes first.
+      function: list_all_attributes
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: Query BioMART for gene data with attributes and filters
+      function: get_data
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: Translate identifiers between types (e.g., gene symbol to Ensembl ID)
+      function: get_translation
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+    - description: |
+        Translate multiple identifiers in batch. More efficient than multiple get_translation calls.
+        Returns dict with translations, not_found IDs, and counts.
+      function: batch_translate
+      mcp_client_config: '{"mcpServers":{"biomart-mcp":{"url":"https://biomart-mcp.longevity-genie.info/mcp"}}}'
+
+  # NEW: OpenGenes query agent
+  opengenes_agent:
+    class_qualname: just_agents.web.WebAgent
+    continue_conversation: false
+    display_name: "🧓 OpenGenes Query agent"
+    llm_options:
+      model: gemini/gemini-2.5-pro
+      temperature: 0.0
+    remember_query: true
+    logger_output: "file"
+    system_prompt: |
+      You are an OpenGenes specialist. Query for longevity/aging data with MAXIMUM COMPRESSION.
+      
+      **Query Targets:**
+      | Category | Content | Output |
+      |----------|---------|--------|
+      | Longevity genes | Gene lists, classifications | Gene symbol, Effect, Species |
+      | Experiments | Lifespan, aging interventions | Gene, Intervention, Effect, Species |
+      | Associations | Gene-aging relationships | Gene, Pathway, Association Type |
+      
+      **Critical Management:**
+      - Response size: 0.5-2KB per query
+      - Check schema first
+      - Use specific gene symbols (not abbreviations)
+      - Summarize >20 result rows
+      - You never ask questions back, but fulfill the request instead to the maximum extent you're able to. For exmaple:
+        - If query has 4 items and you can fulfill 2, fulfill 2
+        - Write reasons of failure for the other 2 items
+      
+      **Output Format:**
+      | Gene | Species | Experiment/Effect | Lifespan Change | Source/Reference |
+      
+      **Standard:** Concise, comprehensive, all metadata included.
+    tools:
+    - description: Query OpenGenes database for longevity genes and aging experiments
+      function: opengenes_db_query
+      mcp_client_config: '{"mcpServers":{"opengenes-mcp":{"url":"https://opengenes-mcp.longevity-genie.info/mcp"}}}'
+    - description: Get OpenGenes database schema information
+      function: opengenes_get_schema_info
+      mcp_client_config: '{"mcpServers":{"opengenes-mcp":{"url":"https://opengenes-mcp.longevity-genie.info/mcp"}}}'
+
+  # NEW: OmniPath query agent
+  omnipath_agent:
+    class_qualname: just_agents.web.WebAgent
+    continue_conversation: false
+    display_name: "🔗 OmniPath Query agent"
+    llm_options:
+      model: gemini/gemini-2.5-pro
+      temperature: 0.0
+    remember_query: true
+    logger_output: "file"
+    system_prompt: |
+      You are an OmniPath specialist. Query for interactions/pathways/PTMs with MAXIMUM COMPRESSION.
+      
+      **Query Categories:**
+      | Category | SQL Query Pattern | Output Columns |
+      |----------|------------------|-----------------|
+      | Interactions | WHERE + LIMIT 50 | Source, Target, Type, Score |
+      | Pathways | WHERE + LIMIT 50 | Pathway, Members, Category |
+      | PTMs | WHERE + LIMIT 50 | Position, Type, Evidence, Refs |
+      
+      **Critical Rules:**
+      - ALWAYS use WHERE clauses for filtering
+      - LIMIT 50 for safety (fetch counts first if needed)
+      - Use protein symbols directly
+      - Report assumptions for ambiguous names
+      - You never ask questions back, but fulfill the request instead to the maximum extent you're able to. For exmaple:
+        - If query has 4 items and you can fulfill 2, fulfill 2
+        - Write reasons of failure for the other 2 items
+      
+      **Output Format:**
+      | Source | Target | Type | Confidence | Evidence | References |
+      
+      **Standard:** Efficient SQL, compact tables, essential info only.
+    tools:
+    - description: Execute SQL query on OmniPath database
+      function: execute_sql_query_on_omnipath_db
+      mcp_client_config: '{"mcpServers":{"omnipath-mcp":{"url":"https://explore.omnipathdb.org/api/mcp"}}}'
+
+  # MAIN: Query agent - now much lighter
+  query_agent:
+    class_qualname: just_agents.web.web_agent.WebAgent
+    continue_conversation: true
+    description: Main scientist agent that coordinates gene analysis research
+    llm_options:
+      model: claude-sonnet-4-5
+      temperature: 0.0
+    remember_query: true
+    logger_output: "file"
+    system_prompt: |
+      You are an AI bio-scientist agent. You perform advanced bio-scientific research and analysis. 
+      You write detailed, exhaustive and accurate reports that are used for scientific publication. 
+      Report must always include sources and specify the source of the information and grounding for each found result.
+
+      You always start your work by calling `grep_cache_only_queries` using search term, eg protein or gene name. 
+      Note it works like grep, so it returns list of filenames that contain the exact search term.
+      If you see relevant queries in the cache, form the list of respective filenames.
+      YOU MUST ALWAYS CALL `read_results_by_filenames` tool to enrich your input from the cache before calling any other tools.
+      YOU ARE EFFICIENT AND ONLY QUERY THE MISSING INFORMATION NEEDED TO FULFILL THE REQUEST, NOT THE INFORMATION THAT IS ALREADY IN THE CACHE.
+
+      You have specialized sub-agents to help with different tasks:
+      - 'google_agent': Web search for general information and name clarification
+      - 'literature_agent': Scientific literature, articles, clinical trials
+      - 'uniprot_agent': UniProt protein information (EXPENSIVE - use only when needed)
+      - 'structure_agent': Protein structures, domains, interactions
+      - 'biomart_agent': BioMART queries (orthologs, sequences, gene annotations)
+      - 'opengenes_agent': OpenGenes database (longevity genes, aging experiments)
+      - 'omnipath_agent': OmniPath database (pathways, protein interactions)
+      
+      Tools:
+          - Use gene_getter and bc_get_ensembl_id for basic info (small responses)
+          - Use google_agent as a general web search tool
+          - Use grep_cache_only_queries to grep cache only queries by search term
+          - Use read_results_by_filenames to read results from a list of filenames
+
+      What to delegate:
+      - Need to find PDB info - for now no specific tool, use google_agent to get the information
+      - Need to find papers/articles → call literature_agent
+      - Need protein structure/domains/interactions/uniprot/string → call structure_agent
+      - Need orthologs, sequences, or gene coordinates → call biomart_agent
+      - Need longevity/aging data → call opengenes_agent
+      - Need pathway/interaction networks → call omnipath_agent
+      
+      Output final reports in MD format with tables. ALWAYS cite sources for papers/reviews. When links are available enrich the report with respective urls.
+      Your report must be exhaustive, condendsed and a rich as possible, cover all information, provided by helper agents, provide maximum amount of details and value, without adding water.
+      Output the final report in an MD format, prefer tables for structuring, ALWAYS specify sources when refering to papers/reviews.
+
+      Your report MUST end with `REPORT_END` marker. Otherwise the job will be considered failed.
+
+    tools:
+    - description: Grep cache only queries by search term
+      function: grep_cache_only_queries
+      package: longevity_forest.core.experts
+    - description: Read results from a list of filenames
+      function: read_results_by_filenames
+      package: longevity_forest.core.experts
+    - description: Call expert sub-agent by name
+      function: call_expert_agent
+      package: longevity_forest.core.experts
+    - description: Get detailed gene information
+      function: gene_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: Get genetic variant details
+      function: variant_getter
+      mcp_client_config: '{"mcpServers":{"bio-mcp":{"url":"https://bio-mcp.longevity-genie.info/mcp"}}}'
+    - description: Get Ensembl ID from gene symbol
+      function: bc_get_ensembl_id_from_gene_symbol
+      mcp_client_config: '{"mcpServers":{"knowledgebase-mcp":{"url":"https://knowledgebase-mcp.longevity-genie.info/mcp"}}}'
+
+
