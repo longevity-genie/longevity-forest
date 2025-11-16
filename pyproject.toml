@@ -10,6 +10,7 @@ dependencies = [
     "win-unicode-console>=0.5", #for poor windows users
     "pyyaml>=6.0.3",
     "pycomfort>=0.0.18",
+    "python-dotenv>=1.0.0",
 ]
 
 [build-system]

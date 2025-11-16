@@ -1,12 +1,24 @@
+![LongevityForest Logo](images/longevity_forest.jpg)
+
 # LongevityForest AI Scientist Agent
 
-An advanced multi-agent bioinformatics research system that analyzes protein structures, sequences, and functional outcomes to establish clear relationships between genetic variations and their biological implications, particularly focusing on longevity and aging.
+LongevityForest is a multi-agent bioinformatics system for analysing protein structures, sequences, and functional outcomes in the context of longevity and ageing.
 
-## 🧬 What Is This?
+## LongevityForest science agents ecosystem
 
-This project implements a **delegated multi-agent architecture** where specialized AI agents work together to perform comprehensive bioinformatics research. Instead of a single monolithic agent, the system orchestrates 7 specialized agents, each with domain-specific expertise and access to dedicated biological databases.
+The LongevityForest science agents ecosystem is a set of tools for studying genes and proteins that influence lifespan. It currently includes:
 
-**Key Capability**: Perform exhaustive gene analysis that integrates:
+- **[longevity_forest](https://github.com/longevity-genie/longevity_forest)** (this repository): multi-agent gene analysis system with specialised bioinformatics agents
+- **[protein_hunter_mcp](https://github.com/longevity-genie/protein_hunter_mcp)**: MCP server for protein structure analysis and protein target selection
+- **[cell2sequence4longevity-mcp](https://github.com/longevity-genie/cell2sequence4longevity-mcp)**: MCP server connecting cellular phenotypes to sequence-level changes in longevity research
+
+Used together, these tools link cellular observations, sequence analysis, and protein structure analysis across multiple biological scales.
+
+## What is this?
+
+This repository provides a delegated multi-agent architecture. Instead of a single monolithic agent, the system orchestrates seven specialised agents, each focused on specific databases or data sources.
+
+The system can analyse a gene by integrating:
 - Genomic sequences and orthologs (BioMART)
 - Protein 3D structures and domains (AlphaFold, PDB, InterPro)
 - Protein-protein interactions (STRING, OmniPath)
@@ -14,13 +26,10 @@ This project implements a **delegated multi-agent architecture** where specializ
 - Longevity and aging data (OpenGenes)
 - Functional variants and their effects (web search + databases)
 
-**Output**: Comprehensive markdown reports with full source attribution, structured in WikiCrow format for scientific clarity.
+The output is a markdown report with source attribution, structured in WikiCrow format.
 
-## 🏗️ Architecture
 
-See [HLA.md](./HLA.md) for a detailed high-level architecture document.
-
-### Quick Overview
+### Quick overview
 
 ```
 Query Agent (Orchestrator)
@@ -32,9 +41,7 @@ Query Agent (Orchestrator)
 └── OmniPath Agent (pathways, interactions)
 ```
 
-**Key Benefit**: Delegated architecture reduces prompt context by **73-88%** compared to monolithic agents, improving accuracy and reducing costs.
-
-## 🚀 Quick Start
+## Quick start
 
 ### Prerequisites
 
@@ -52,21 +59,33 @@ cd longevity_forest
 # Install dependencies with uv
 uv sync
 
-# Create .env file with your API keys
-cp .env.example .env
-# Edit .env with your credentials:
-# - ANTHROPIC_API_KEY
+# Copy .env.template to .env and fill in your API keys
+cp .env.template .env
+
+# Edit .env with your API keys:
+# - ANTHROPIC_API_KEY (required) - Used by literature, structure, biomart, and query agents
+# - GEMINI_API_KEY (required) - Used by google, opengenes, and omnipath agents
+# - Google Cloud credentials (optional - for Vertex AI)
 # - Other database credentials as needed
 ```
 
-### Running Gene Analysis
+### Running gene analysis
 
 ```bash
-# Analyze a specific gene
-uv run longevity_forest
+# Analyze a specific gene (default: NRF2)
+uv run longevity_forest analyze-gene
 
-# The default gene is NRF2, modify src/longevity_forest/main.py to change:
-# gene_name: str = "NRF2"  # Change this line
+# Analyze a specific gene by name
+uv run longevity_forest analyze-gene TP53
+
+# Analyze multiple genes
+uv run longevity_forest analyze-genes NRF2 TP53 FOXO3
+
+# Available options:
+# --config, -c: Path to configuration YAML file
+# --cache/--no-cache: Enable/disable cached interim results (default: enabled)
+# --debug, -d: Show debug information including tool distribution
+# --show-history/--no-history: Display conversation history (default: enabled for single gene)
 ```
 
 ### Output
@@ -85,30 +104,36 @@ Example output structure:
 ## 6. References
 ```
 
-## 📊 Features
+## Features
 
-- **Multi-Source Data Integration**: Combines data from 6+ specialized databases
-- **Scientific Rigor**: All claims backed by citations with PubMed IDs and DOIs
-- **Specialized Agents**: Task-specific prompts and tools for accuracy
-- **Conversation Memory**: Full conversation history for transparency and debugging
-- **Scalable Architecture**: Easy to add new specialist agents or databases
-- **Context Efficiency**: Optimized token usage through delegation
-- **Continuation Handling**: Automatically continues incomplete report generation
-- **Intermediate Caching**: Results cached in `data/interim/` for analysis
+- Multi-source data integration from several specialised biological databases
+- Results backed by citations with PubMed IDs and DOIs
+- Task-specific agents and prompts for different parts of the analysis
+- Conversation history stored for transparency and debugging
+- Architecture that makes it straightforward to add new agents or databases
+- Reduced context size through delegation between agents
+- Automatic continuation when a report is incomplete
+- Intermediate results cached in `data/interim/` for later inspection
 
-## 🔧 Configuration
+## Configuration
 
-### Main Configuration Files
+### Main configuration files
 
-- **`config/agents/web_search_delegated.yaml`**: Agent profiles and tool mappings (primary)
-- **`config/agents/web_search_full.yaml`**: Alternative monolithic configuration
-- **`config/llm.py`**: LLM settings (Anthropic Claude 4.5 Haiku)
-- **`config/prompts.py`**: System prompts for each agent
-- **`config/mcp.py`**: Database connections (BioMART, OpenGenes, etc.)
+- **`src/longevity_forest/config/agents/web_search_delegated.yaml`**: Agent profiles and tool mappings (primary)
+- **`src/longevity_forest/config/agents/web_search_full.yaml`**: Alternative monolithic configuration
+- **`src/longevity_forest/config/llm.py`**: LLM settings (Anthropic Claude 4.5 Haiku)
+- **`src/longevity_forest/config/prompts.py`**: System prompts for each agent
+- **`src/longevity_forest/config/mcp.py`**: Database connections (BioMART, OpenGenes, etc.)
 
-### Customizing Gene Analysis
+### Customising gene analysis
 
-Edit the analysis prompt in `config/prompts.py`:
+To analyze a different gene, use the CLI command:
+
+```bash
+uv run longevity_forest analyze-gene GENE_NAME
+```
+
+To customize the analysis prompt, edit `src/longevity_forest/config/prompts.py`:
 
 ```python
 def get_gene_analysis_prompt(gene_name: str) -> str:
@@ -122,13 +147,7 @@ def get_gene_analysis_prompt(gene_name: str) -> str:
     """
 ```
 
-Then modify `main.py` to use a different gene:
-
-```python
-gene_name: str = "TP53"  # or any other gene
-```
-
-## 📁 Project Structure
+## Project structure
 
 ```
 longevity_forest/
@@ -155,10 +174,11 @@ longevity_forest/
 │   ├── output/                  # Final markdown reports (*.md)
 │   └── example/                 # Example outputs
 ├── logs/                        # Execution logs (JSON + text)
-└── .env                         # Environment variables (API keys)
+├── .env                         # Environment variables (API keys) - create from .env.template
+└── .env.template                # Template for environment variables with all required keys
 ```
 
-## 💾 Data Flow
+## Data flow
 
 1. **Input**: Gene name (e.g., "NRF2")
 2. **Orchestration**: Query Agent delegates to 6 specialists
@@ -166,14 +186,17 @@ longevity_forest/
 4. **Integration**: Query Agent synthesizes findings
 5. **Output**: Markdown report with full citations
 
-## 🔍 Example: NRF2 Analysis
+## Example: NRF2 analysis
 
 ```bash
 # Run default NRF2 analysis
-uv run longevity_forest
+uv run longevity_forest analyze-gene NRF2
+
+# Or use the default (NRF2)
+uv run longevity_forest analyze-gene
 ```
 
-**This performs**:
+The default NRF2 analysis performs:
 - BioMART lookup: Human ENSG00000116236, mouse/rat orthologs
 - Literature search: ~500+ papers on NRF2 function and variants
 - OpenGenes query: NRF2 association with longevity and aging
@@ -181,40 +204,47 @@ uv run longevity_forest
 - OmniPath query: Antioxidant response elements, pathway context
 - Integration: Cross-referenced findings with source attribution
 
-**Output**: `data/output/NRF2_TIMESTAMP.md` with complete analysis
+The output is saved to `data/output/NRF2_TIMESTAMP.md`.
 
-## 📦 Dependencies
+## Dependencies
 
-- **[just-agents](https://github.com/longgpt/just_agents)** >= 0.8.7: Multi-agent framework
-- **[typer](https://typer.tiangolo.com/)**: CLI framework (future CLI support)
+- **[just-agents](https://github.com/longgpt/just_agents)** >= 0.8.8: Multi-agent framework
+- **[typer](https://typer.tiangolo.com/)**: CLI framework
 - **[python-dotenv](https://python-dotenv.readthedocs.io/)**: Environment configuration
 - **[win-unicode-console](https://github.com/Ekopalypse/win_unicode_console/)**: Windows UTF-8 support
 
 See `pyproject.toml` for complete dependency list.
 
-## 🔑 Environment Setup
+## Environment setup
 
-Create a `.env` file in the project root:
+This project uses two LLM providers: **Anthropic (Claude)** and **Google Gemini**. Different agents use different models:
 
-```env
-# Anthropic API
-ANTHROPIC_API_KEY=your_api_key_here
+- **Anthropic Claude**: Used by literature_agent, structure_agent, biomart_agent (Haiku), and query_agent (Sonnet)
+- **Google Gemini**: Used by google_agent, opengenes_agent, and omnipath_agent (Gemini 2.5 Pro)
 
-# Optional: Database credentials
-# BIOMART_API_KEY=...
-# OPENGENES_API_KEY=...
-# OMNIPATH_API_KEY=...
+1. Copy the template file:
+```bash
+cp .env.template .env
 ```
 
-Load with:
+2. Edit `.env` and add your API keys. You need:
+   - **ANTHROPIC_API_KEY** (required) - For Claude models
+   - **GEMINI_API_KEY** (required) - For Gemini models
+   
+   Optional:
+   - Google Cloud credentials (GOOGLE_CLOUD_PROJECT, GOOGLE_API_KEY, etc.) - For Vertex AI usage
+
+See `.env.template` for the complete list of configuration options.
+
+The environment variables are automatically loaded when running the CLI:
 ```python
 from dotenv import load_dotenv
 load_dotenv()
 ```
 
-## 📖 Advanced Usage
+## Advanced usage
 
-### Running with Detailed Logging
+### Running with detailed logging
 
 Logs are automatically saved to `logs/` directory:
 ```
@@ -223,14 +253,15 @@ logs/
 └── TIMESTAMP_XXXX.json.log  # JSON formatted logs
 ```
 
-To enable debug output, edit `main.py`:
-```python
-if True:  # Set to True for tool distribution debug
-    print("\nTool distribution across agents:")
-    # ... debugging output ...
+To enable debug output, use the `--debug` flag:
+
+```bash
+uv run longevity_forest analyze-gene NRF2 --debug
 ```
 
-### Intermediate Results
+This will show tool distribution across agents and other debugging information.
+
+### Intermediate results
 
 Cached intermediate results are stored in `data/interim/`:
 ```
@@ -244,14 +275,14 @@ Use helper functions to inspect:
 from longevity_forest.core.helpers import serialize_memory_to_yaml, serialize_content
 ```
 
-### Extending with New Agents
+### Extending with new agents
 
 1. Add agent profile to `config/agents/web_search_delegated.yaml`
 2. Define system prompt in `config/prompts.py`
 3. Configure tools/MCPs in `config/mcp.py`
 4. Query Agent will automatically delegate to new agent
 
-## 🧪 Testing & Validation
+## Testing and validation
 
 All results are validated before completion:
 
@@ -262,33 +293,33 @@ else:
     print(f"⚠ Query result saved but validation had issues: {filepath}")
 ```
 
-Validation checks:
+Validation checks include:
 - Markdown syntax integrity
 - UTF-8 encoding correctness
 - File write success
 
-## 🎯 Use Cases
+## Use cases
 
-- **Gene Function Analysis**: Understand sequence-to-function relationships
-- **Variant Impact Assessment**: Predict effects of genetic variants
-- **Longevity Research**: Identify aging-related genes and pathways
-- **Drug Target Validation**: Analyze protein targets and interactions
-- **Literature Mining**: Comprehensive scientific research synthesis
-- **Structural Bioinformatics**: Integrate sequence and 3D structure data
+- Gene function analysis: sequence-to-function relationships
+- Variant impact assessment for genetic variants
+- Longevity research: ageing-related genes and pathways
+- Drug target analysis for protein targets and interactions
+- Literature mining and research synthesis
+- Structural bioinformatics combining sequence and 3D structure data
 
-## ⚙️ Performance
+## Performance
 
-- **Context Efficiency**: 73-88% reduction vs monolithic agents
-- **Token Usage**: ~3-5K tokens per gene analysis (vs 10-15K for monolithic)
-- **Execution Time**: 2-10 minutes depending on complexity and source availability
-- **Reliability**: Automatic continuation for incomplete responses
-- **Accuracy**: Cross-source validation reduces hallucinations
+- Context efficiency: 73–88% reduction compared to monolithic agents
+- Token usage: roughly 3–5K tokens per gene analysis (vs 10–15K for monolithic setups)
+- Execution time: typically 2–10 minutes depending on sources and gene complexity
+- Automatic continuation for incomplete responses
+- Cross-source validation to reduce hallucinations
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### "Agent with shortname X not found"
-- Verify agent is defined in `config/agents/web_search_delegated.yaml`
-- Check agent is loaded in `main.py` agents list
+- Verify agent is defined in `src/longevity_forest/config/agents/web_search_delegated.yaml`
+- Check agent is loaded in `src/longevity_forest/main.py` agents list
 
 ### "API rate limit exceeded"
 - Wait before re-running
@@ -304,7 +335,7 @@ Validation checks:
 - System automatically reconfigures stdout/stderr to UTF-8
 - Verify Windows locale settings support Unicode
 
-## 📚 References
+## References
 
 - [just-agents Documentation](https://github.com/longgpt/just_agents)
 - [Model Context Protocols (MCP)](https://modelcontextprotocol.io/)
@@ -314,36 +345,32 @@ Validation checks:
 - [InterPro](https://www.ebi.ac.uk/interpro/)
 - [STRING Database](https://string-db.org/)
 
-## 📄 Architecture Documentation
+## Architecture documentation
 
-For detailed information about the system architecture, see [HLA.md](./HLA.md) which covers:
-- Complete agent descriptions
-- Data flow diagrams
-- Tool mappings
-- Extension points
-- Performance analysis
+For detailed information about the system architecture, see the agent configuration files:
+- Agent profiles: `src/longevity_forest/config/agents/web_search_delegated.yaml`
+- Agent prompts: `src/longevity_forest/config/prompts.py`
+- MCP configurations: `src/longevity_forest/config/mcp.py`
+- Tool mappings: `src/longevity_forest/config/GENE_ANALYSIS_TOOL_MAPPING.md`
 
-## 🤝 Contributing
+## Contributing
 
 To extend this system:
 
-1. **Add new agent**: Modify `config/agents/web_search_delegated.yaml` + add prompt
-2. **Add new database**: Create MCP in `config/mcp.py`
-3. **Modify analysis prompt**: Edit `config/prompts.py` functions
+1. **Add new agent**: Modify `src/longevity_forest/config/agents/web_search_delegated.yaml` + add prompt
+2. **Add new database**: Create MCP in `src/longevity_forest/config/mcp.py`
+3. **Modify analysis prompt**: Edit `src/longevity_forest/config/prompts.py` functions
 4. **Change output format**: Modify report generation in agents
 
-## 📝 License
+## License
 
 See LICENSE file for details.
 
-## 🔬 Scientific Use
+## Scientific use
 
-This tool is designed for research purposes. When publishing results:
-- Always cite original sources (automatically done)
-- Verify findings against literature
-- Use as a research assistant, not sole authority
-- Document all assumptions and limitations
+When publishing results based on this system:
+- cite the original data sources
+- verify important findings against the underlying literature
+- treat the agent outputs as assistance for expert analysis, not a substitute for it
 
----
-
-**Questions?** See [HLA.md](./HLA.md) for architecture details or review `config/prompts.py` for agent behavior customization.
+For agent behaviour configuration, see `src/longevity_forest/config/prompts.py`. For tool mappings, see `src/longevity_forest/config/GENE_ANALYSIS_TOOL_MAPPING.md`.
